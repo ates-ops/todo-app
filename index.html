@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Todo App</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Aufgaben</h1>
+      <span id="task-count" class="task-count">0 offen</span>
+    </header>
+
+    <div class="input-row">
+      <input
+        type="text"
+        id="todo-input"
+        placeholder="Neue Aufgabe hinzufügen..."
+        maxlength="200"
+        autocomplete="off"
+      />
+      <button id="add-btn" aria-label="Hinzufügen">+</button>
+    </div>
+
+    <div class="filter-row">
+      <button class="filter-btn active" data-filter="all">Alle</button>
+      <button class="filter-btn" data-filter="open">Offen</button>
+      <button class="filter-btn" data-filter="done">Erledigt</button>
+    </div>
+
+    <ul id="todo-list"></ul>
+
+    <footer id="footer" class="footer hidden">
+      <span id="done-count"></span>
+      <button id="clear-done-btn">Erledigte löschen</button>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
