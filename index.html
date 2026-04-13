@@ -3,60 +3,116 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Todo App</title>
+  <title>Kanban Board</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>Aufgaben</h1>
-      <span id="task-count" class="task-count">0 offen</span>
+  <div class="app">
+    <header class="app-header">
+      <div class="header-brand">
+        <h1>Kanban Board</h1>
+      </div>
+      <div class="header-form">
+        <input type="text" id="todo-input" placeholder="Neue Aufgabe hinzufügen..." maxlength="200" autocomplete="off" />
+        <select id="category-select" aria-label="Kategorie">
+          <option value="">– Kategorie –</option>
+          <option value="work">Arbeit</option>
+          <option value="private">Privat</option>
+          <option value="shopping">Shopping</option>
+        </select>
+        <select id="priority-select" aria-label="Priorität">
+          <option value="">– Priorität –</option>
+          <option value="high">Hoch</option>
+          <option value="medium">Mittel</option>
+          <option value="low">Niedrig</option>
+        </select>
+        <input type="date" id="due-date-input" aria-label="Fälligkeitsdatum" />
+        <button id="add-btn">+ Hinzufügen</button>
+      </div>
     </header>
 
-    <div class="input-row">
-      <input
-        type="text"
-        id="todo-input"
-        placeholder="Neue Aufgabe hinzufügen..."
-        maxlength="200"
-        autocomplete="off"
-      />
-      <select id="category-select" aria-label="Kategorie">
-        <option value="">– Kategorie –</option>
-        <option value="work">Arbeit</option>
-        <option value="private">Privat</option>
-        <option value="shopping">Shopping</option>
-      </select>
-      <select id="priority-select" aria-label="Priorität">
-        <option value="">– Priorität –</option>
-        <option value="high">Hoch</option>
-        <option value="medium">Mittel</option>
-        <option value="low">Niedrig</option>
-      </select>
-      <input type="date" id="due-date-input" aria-label="Fälligkeitsdatum" />
-      <button id="add-btn" aria-label="Hinzufügen">+</button>
+    <div class="kanban-board">
+      <div class="kanban-column" data-column="offen">
+        <div class="column-header" style="--col-color:#6c63ff">
+          <span class="column-color-strip"></span>
+          <h2 class="column-title">Offen</h2>
+          <span class="column-count" id="count-offen">0</span>
+        </div>
+        <div class="column-body" id="col-offen"></div>
+      </div>
+
+      <div class="kanban-column" data-column="inarbeit">
+        <div class="column-header" style="--col-color:#f59e0b">
+          <span class="column-color-strip"></span>
+          <h2 class="column-title">In Arbeit</h2>
+          <span class="column-count" id="count-inarbeit">0</span>
+        </div>
+        <div class="column-body" id="col-inarbeit"></div>
+      </div>
+
+      <div class="kanban-column" data-column="blockiert">
+        <div class="column-header" style="--col-color:#ef4444">
+          <span class="column-color-strip"></span>
+          <h2 class="column-title">Blockiert</h2>
+          <span class="column-count" id="count-blockiert">0</span>
+        </div>
+        <div class="column-body" id="col-blockiert"></div>
+      </div>
+
+      <div class="kanban-column" data-column="erledigt">
+        <div class="column-header" style="--col-color:#22c55e">
+          <span class="column-color-strip"></span>
+          <h2 class="column-title">Erledigt</h2>
+          <span class="column-count" id="count-erledigt">0</span>
+        </div>
+        <div class="column-body" id="col-erledigt"></div>
+      </div>
     </div>
+  </div>
 
-    <div class="filter-row">
-      <button class="filter-btn active" data-filter="all">Alle</button>
-      <button class="filter-btn" data-filter="open">Offen</button>
-      <button class="filter-btn" data-filter="done">Erledigt</button>
-      <button id="sort-priority-btn" class="filter-btn sort-btn" title="Nach Priorität sortieren">&#8597; Priorität</button>
+  <!-- Task detail modal -->
+  <div id="modal-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-header">
+        <input type="text" id="modal-title" class="modal-title-input" placeholder="Aufgabentitel..." />
+        <button id="modal-close" aria-label="Schließen">✕</button>
+      </div>
+
+      <div class="modal-subheader">
+        <div id="modal-meta" class="modal-meta"></div>
+        <select id="modal-column" class="modal-column-select" aria-label="Spalte verschieben">
+          <option value="offen">Offen</option>
+          <option value="inarbeit">In Arbeit</option>
+          <option value="blockiert">Blockiert</option>
+          <option value="erledigt">Erledigt</option>
+        </select>
+      </div>
+
+      <div class="modal-body">
+        <div class="modal-section">
+          <h3 class="modal-section-title">Beschreibung</h3>
+          <textarea id="modal-description" class="modal-description" placeholder="Beschreibung hinzufügen..."></textarea>
+        </div>
+
+        <div class="modal-section">
+          <h3 class="modal-section-title">Checkliste</h3>
+          <div id="modal-checklist-items" class="checklist-items"></div>
+          <div class="checklist-add-row">
+            <input type="text" id="checklist-input" placeholder="Neues Element..." />
+            <button id="checklist-add-btn">+</button>
+          </div>
+        </div>
+
+        <div class="modal-section">
+          <h3 class="modal-section-title">Kommentare</h3>
+          <div id="modal-comments-list" class="comments-list"></div>
+          <div class="comment-add-row">
+            <textarea id="comment-input" placeholder="Kommentar schreiben..." rows="2"></textarea>
+            <button id="comment-add-btn">Senden</button>
+          </div>
+        </div>
+      </div>
     </div>
-
-    <div class="category-filter-row">
-      <button class="cat-btn active" data-cat="all">Alle Kategorien</button>
-      <button class="cat-btn" data-cat="work">Arbeit</button>
-      <button class="cat-btn" data-cat="private">Privat</button>
-      <button class="cat-btn" data-cat="shopping">Shopping</button>
-    </div>
-
-    <ul id="todo-list"></ul>
-
-    <footer id="footer" class="footer hidden">
-      <span id="done-count"></span>
-      <button id="clear-done-btn">Erledigte löschen</button>
-    </footer>
   </div>
 
   <script src="script.js"></script>

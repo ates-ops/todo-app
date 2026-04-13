@@ -1,6 +1,6 @@
 'use strict';
 
-const STORAGE_KEY = 'todos_v1';
+const STORAGE_KEY = 'kanban_v1';
 
 const CATEGORIES = {
   work:     { label: 'Arbeit',   color: '#3b82f6' },
@@ -9,294 +9,494 @@ const CATEGORIES = {
 };
 
 const PRIORITIES = {
-  high:   { label: 'Hoch',     color: '#ef4444', order: 1 },
-  medium: { label: 'Mittel',   color: '#eab308', order: 2 },
-  low:    { label: 'Niedrig',  color: '#22c55e', order: 3 },
+  high:   { label: 'Hoch',    color: '#ef4444', order: 1 },
+  medium: { label: 'Mittel',  color: '#eab308', order: 2 },
+  low:    { label: 'Niedrig', color: '#22c55e', order: 3 },
 };
 
+const COLUMNS = [
+  { id: 'offen',     label: 'Offen',     color: '#6c63ff' },
+  { id: 'inarbeit',  label: 'In Arbeit', color: '#f59e0b' },
+  { id: 'blockiert', label: 'Blockiert', color: '#ef4444' },
+  { id: 'erledigt',  label: 'Erledigt',  color: '#22c55e' },
+];
+
 let todos = load();
-let filter = 'all';
-let categoryFilter = 'all';
-let sortByPriority = false;
-
-// ── Drag state ────────────────────────────────────────────────
+let modalTodoId = null;
 let dragId = null;
-
-const input           = document.getElementById('todo-input');
-const categorySelect  = document.getElementById('category-select');
-const prioritySelect  = document.getElementById('priority-select');
-const dueDateInput    = document.getElementById('due-date-input');
-const addBtn          = document.getElementById('add-btn');
-const list            = document.getElementById('todo-list');
-const taskCount       = document.getElementById('task-count');
-const footer          = document.getElementById('footer');
-const doneCount       = document.getElementById('done-count');
-const clearBtn        = document.getElementById('clear-done-btn');
-const filterBtns      = document.querySelectorAll('.filter-btn:not(#sort-priority-btn)');
-const catBtns         = document.querySelectorAll('.cat-btn');
-const sortPriorityBtn = document.getElementById('sort-priority-btn');
 
 // ── Persistence ──────────────────────────────────────────────
 
 function load() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
-  catch { return []; }
+  try {
+    const data = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (data) return data;
+    // Migrate from old list format
+    const old = JSON.parse(localStorage.getItem('todos_v1'));
+    if (old && old.length) {
+      return old.map(t => ({
+        id: t.id,
+        text: t.text,
+        column: t.done ? 'erledigt' : 'offen',
+        done: !!t.done,
+        category: t.category || null,
+        priority: t.priority || null,
+        dueDate: t.dueDate || null,
+        description: '',
+        checklist: [],
+        comments: [],
+      }));
+    }
+    return [];
+  } catch { return []; }
 }
 
 function save() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
 }
 
-// ── State helpers ─────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────
 
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function addTodo(text, category, priority, dueDate) {
-  text = text.trim();
-  if (!text) return;
-  todos.unshift({ id: Date.now(), text, done: false, category: category || null, priority: priority || null, dueDate: dueDate || null });
-  save();
-  render();
+function formatTimestamp(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    + ' ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 }
 
-function toggleTodo(id) {
+// ── Todo operations ──────────────────────────────────────────
+
+function addTodo(text, category, priority, dueDate) {
+  text = text.trim();
+  if (!text) return false;
+  todos.unshift({
+    id: Date.now(),
+    text,
+    column: 'offen',
+    done: false,
+    category: category || null,
+    priority: priority || null,
+    dueDate: dueDate || null,
+    description: '',
+    checklist: [],
+    comments: [],
+  });
+  save();
+  renderBoard();
+  return true;
+}
+
+function moveTodoToColumn(id, column) {
   const todo = todos.find(t => t.id === id);
-  if (todo) { todo.done = !todo.done; save(); render(); }
+  if (!todo || todo.column === column) return;
+  todo.column = column;
+  todo.done = column === 'erledigt';
+  save();
+  renderBoard();
+  // Sync modal column selector if open
+  if (modalTodoId === id) {
+    document.getElementById('modal-column').value = column;
+  }
 }
 
 function deleteTodo(id) {
   todos = todos.filter(t => t.id !== id);
   save();
-  render();
+  if (modalTodoId === id) closeModal(false);
+  renderBoard();
 }
 
-function clearDone() {
-  todos = todos.filter(t => !t.done);
-  save();
-  render();
-}
+// ── Board render ─────────────────────────────────────────────
 
-function moveTodo(fromId, toId, insertBefore) {
-  const fromIdx = todos.findIndex(t => t.id === fromId);
-  const toIdx   = todos.findIndex(t => t.id === toId);
-  if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
-  const [item] = todos.splice(fromIdx, 1);
-  const newToIdx = todos.findIndex(t => t.id === toId);
-  todos.splice(insertBefore ? newToIdx : newToIdx + 1, 0, item);
-  save();
-  render();
-}
+function renderBoard() {
+  COLUMNS.forEach(col => {
+    const body  = document.getElementById(`col-${col.id}`);
+    const count = document.getElementById(`count-${col.id}`);
+    const colTodos = todos.filter(t => t.column === col.id);
 
-function clearDragStyles() {
-  list.querySelectorAll('.todo-item').forEach(el =>
-    el.classList.remove('dragging', 'drag-over-top', 'drag-over-bottom')
-  );
-}
+    count.textContent = colTodos.length;
+    body.innerHTML = '';
 
-// ── Render ───────────────────────────────────────────────────
-
-function visibleTodos() {
-  let items = todos;
-  if (filter === 'open') items = items.filter(t => !t.done);
-  if (filter === 'done') items = items.filter(t =>  t.done);
-  if (categoryFilter !== 'all') items = items.filter(t => t.category === categoryFilter);
-  if (sortByPriority) {
-    items = [...items].sort((a, b) => {
-      const oa = a.priority ? PRIORITIES[a.priority].order : 99;
-      const ob = b.priority ? PRIORITIES[b.priority].order : 99;
-      return oa - ob;
-    });
-  }
-  return items;
-}
-
-function render() {
-  const items = visibleTodos();
-  const openCount = todos.filter(t => !t.done).length;
-  const doneTotal = todos.filter(t =>  t.done).length;
-
-  // Header counter
-  taskCount.textContent = openCount === 1 ? '1 offen' : `${openCount} offen`;
-
-  // Footer
-  if (todos.length === 0) {
-    footer.classList.add('hidden');
-  } else {
-    footer.classList.remove('hidden');
-    doneCount.textContent = `${doneTotal} erledigt`;
-  }
-
-  // Sort button state
-  sortPriorityBtn.classList.toggle('active', sortByPriority);
-
-  // Category filter active states
-  catBtns.forEach(btn => {
-    const isActive = btn.dataset.cat === categoryFilter;
-    btn.classList.toggle('active', isActive);
-    const cat = CATEGORIES[btn.dataset.cat];
-    if (isActive && cat) {
-      btn.style.background = cat.color;
-      btn.style.borderColor = cat.color;
-      btn.style.color = '#fff';
-    } else if (!isActive && cat) {
-      btn.style.background = '';
-      btn.style.borderColor = '';
-      btn.style.color = '';
+    if (colTodos.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'card-empty';
+      empty.textContent = 'Keine Aufgaben';
+      body.appendChild(empty);
+    } else {
+      colTodos.forEach(todo => body.appendChild(createCard(todo)));
     }
   });
+}
 
-  // List
-  list.innerHTML = '';
+function createCard(todo) {
+  const card = document.createElement('div');
+  card.className = 'kanban-card' + (todo.done ? ' card-done' : '');
+  card.dataset.id = todo.id;
+  card.draggable = true;
 
-  if (items.length === 0) {
-    const msg = filter === 'done'
-      ? 'Noch nichts erledigt.'
-      : filter === 'open'
-      ? 'Alle Aufgaben erledigt!'
-      : 'Keine Aufgaben vorhanden.';
-    list.innerHTML = `<li class="empty">${msg}</li>`;
-    return;
+  // Priority bar
+  if (todo.priority) {
+    const bar = document.createElement('div');
+    bar.className = `card-priority-bar priority-${todo.priority}`;
+    card.appendChild(bar);
   }
 
-  items.forEach(todo => {
-    const li = document.createElement('li');
-    li.className = 'todo-item' + (todo.done ? ' done' : '');
-    li.dataset.id = todo.id;
+  const body = document.createElement('div');
+  body.className = 'card-body';
 
-    // Drag handle — only enable dragging when grabbed via the handle
-    const handle = document.createElement('span');
-    handle.className = 'drag-handle' + (sortByPriority ? ' drag-handle-disabled' : '');
-    handle.setAttribute('aria-hidden', 'true');
-    handle.title = sortByPriority ? 'Sortierung deaktiviert' : 'Ziehen zum Sortieren';
-    if (!sortByPriority) {
-      handle.addEventListener('mousedown', () => { li.draggable = true; });
-      handle.addEventListener('touchstart', () => { li.draggable = true; }, { passive: true });
-    }
+  // Title row
+  const titleRow = document.createElement('div');
+  titleRow.className = 'card-title-row';
 
-    li.addEventListener('dragstart', e => {
-      dragId = todo.id;
-      e.dataTransfer.effectAllowed = 'move';
-      setTimeout(() => li.classList.add('dragging'), 0);
-    });
-    li.addEventListener('dragend', () => {
-      li.draggable = false;
-      dragId = null;
-      clearDragStyles();
-    });
-    li.addEventListener('dragover', e => {
-      if (!dragId || dragId === todo.id) return;
+  const titleEl = document.createElement('span');
+  titleEl.className = 'card-title';
+  titleEl.textContent = todo.text;
+
+  const del = document.createElement('button');
+  del.className = 'card-delete';
+  del.textContent = '✕';
+  del.title = 'Löschen';
+  del.addEventListener('click', e => { e.stopPropagation(); deleteTodo(todo.id); });
+
+  titleRow.append(titleEl, del);
+  body.appendChild(titleRow);
+
+  // Badges
+  const badges = document.createElement('div');
+  badges.className = 'card-badges';
+
+  if (todo.priority) {
+    const b = document.createElement('span');
+    b.className = `badge badge-priority priority-badge-${todo.priority}`;
+    b.textContent = PRIORITIES[todo.priority].label;
+    badges.appendChild(b);
+  }
+
+  if (todo.category && CATEGORIES[todo.category]) {
+    const cat = CATEGORIES[todo.category];
+    const b = document.createElement('span');
+    b.className = 'badge badge-category';
+    b.textContent = cat.label;
+    b.style.cssText = `background:${cat.color}28;color:${cat.color};border-color:${cat.color}66`;
+    badges.appendChild(b);
+  }
+
+  if (todo.dueDate) {
+    const today = todayStr();
+    const [y, m, d] = todo.dueDate.split('-');
+    const b = document.createElement('span');
+    b.className = 'badge badge-due'
+      + (todo.dueDate < today ? ' due-overdue' : todo.dueDate === today ? ' due-today' : '');
+    b.textContent = `\uD83D\uDCC5 ${d}.${m}.${y}`;
+    badges.appendChild(b);
+  }
+
+  body.appendChild(badges);
+
+  // Checklist progress
+  if (todo.checklist && todo.checklist.length > 0) {
+    const done = todo.checklist.filter(i => i.done).length;
+    const progress = document.createElement('div');
+    progress.className = 'card-progress';
+    const bar = document.createElement('div');
+    bar.className = 'progress-bar';
+    const fill = document.createElement('div');
+    fill.className = 'progress-fill';
+    fill.style.width = `${(done / todo.checklist.length) * 100}%`;
+    bar.appendChild(fill);
+    const label = document.createElement('span');
+    label.className = 'progress-label';
+    label.textContent = `${done}/${todo.checklist.length}`;
+    progress.append(bar, label);
+    body.appendChild(progress);
+  }
+
+  // Comments indicator
+  if (todo.comments && todo.comments.length > 0) {
+    const ci = document.createElement('span');
+    ci.className = 'card-comment-count';
+    ci.textContent = `\uD83D\uDCAC ${todo.comments.length}`;
+    body.appendChild(ci);
+  }
+
+  card.appendChild(body);
+
+  // Click → modal
+  card.addEventListener('click', () => openModal(todo.id));
+
+  // Drag
+  card.addEventListener('dragstart', e => {
+    dragId = todo.id;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(todo.id));
+    setTimeout(() => card.classList.add('dragging'), 0);
+  });
+  card.addEventListener('dragend', () => {
+    dragId = null;
+    card.classList.remove('dragging');
+    document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+  });
+
+  return card;
+}
+
+// ── Column drop zones ────────────────────────────────────────
+
+function setupColumnDrop() {
+  COLUMNS.forEach(col => {
+    const body = document.getElementById(`col-${col.id}`);
+
+    body.addEventListener('dragover', e => {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-      clearDragStyles();
-      const mid = li.getBoundingClientRect().top + li.offsetHeight / 2;
-      li.classList.add(e.clientY < mid ? 'drag-over-top' : 'drag-over-bottom');
-    });
-    li.addEventListener('dragleave', e => {
-      if (!li.contains(e.relatedTarget)) {
-        li.classList.remove('drag-over-top', 'drag-over-bottom');
-      }
-    });
-    li.addEventListener('drop', e => {
-      e.preventDefault();
-      if (!dragId || dragId === todo.id) return;
-      const mid = li.getBoundingClientRect().top + li.offsetHeight / 2;
-      moveTodo(dragId, todo.id, e.clientY < mid);
+      body.classList.add('drag-over');
     });
 
-    const dot = document.createElement('span');
-    const prio = todo.priority && PRIORITIES[todo.priority];
-    dot.className = 'priority-dot' + (todo.priority ? ` priority-${todo.priority}` : ' priority-none');
-    dot.title = prio ? `Priorität: ${prio.label}` : 'Keine Priorität';
+    body.addEventListener('dragleave', e => {
+      if (!body.contains(e.relatedTarget)) {
+        body.classList.remove('drag-over');
+      }
+    });
+
+    body.addEventListener('drop', e => {
+      e.preventDefault();
+      body.classList.remove('drag-over');
+      if (dragId) moveTodoToColumn(dragId, col.id);
+    });
+  });
+}
+
+// ── Modal ────────────────────────────────────────────────────
+
+function openModal(id) {
+  const todo = todos.find(t => t.id === id);
+  if (!todo) return;
+  modalTodoId = id;
+
+  document.getElementById('modal-title').value = todo.text;
+  document.getElementById('modal-description').value = todo.description || '';
+  document.getElementById('modal-column').value = todo.column;
+
+  renderModalMeta(todo);
+  renderChecklist(todo);
+  renderComments(todo);
+
+  document.getElementById('modal-overlay').classList.remove('hidden');
+  document.getElementById('modal-title').focus();
+}
+
+function closeModal(doSave = true) {
+  if (doSave) saveModalData();
+  modalTodoId = null;
+  document.getElementById('modal-overlay').classList.add('hidden');
+  document.getElementById('checklist-input').value = '';
+  document.getElementById('comment-input').value = '';
+}
+
+function saveModalData() {
+  if (!modalTodoId) return;
+  const todo = todos.find(t => t.id === modalTodoId);
+  if (!todo) return;
+  const newTitle = document.getElementById('modal-title').value.trim();
+  if (newTitle) todo.text = newTitle;
+  todo.description = document.getElementById('modal-description').value;
+  save();
+  renderBoard();
+}
+
+function renderModalMeta(todo) {
+  const meta = document.getElementById('modal-meta');
+  meta.innerHTML = '';
+
+  if (todo.priority) {
+    const b = document.createElement('span');
+    b.className = `badge badge-priority priority-badge-${todo.priority}`;
+    b.textContent = PRIORITIES[todo.priority].label;
+    meta.appendChild(b);
+  }
+
+  if (todo.category && CATEGORIES[todo.category]) {
+    const cat = CATEGORIES[todo.category];
+    const b = document.createElement('span');
+    b.className = 'badge badge-category';
+    b.textContent = cat.label;
+    b.style.cssText = `background:${cat.color}28;color:${cat.color};border-color:${cat.color}66`;
+    meta.appendChild(b);
+  }
+
+  if (todo.dueDate) {
+    const today = todayStr();
+    const [y, m, d] = todo.dueDate.split('-');
+    const b = document.createElement('span');
+    b.className = 'badge badge-due'
+      + (todo.dueDate < today ? ' due-overdue' : todo.dueDate === today ? ' due-today' : '');
+    b.textContent = `\uD83D\uDCC5 ${d}.${m}.${y}`;
+    meta.appendChild(b);
+  }
+}
+
+function renderChecklist(todo) {
+  const container = document.getElementById('modal-checklist-items');
+  container.innerHTML = '';
+
+  (todo.checklist || []).forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'checklist-item';
 
     const check = document.createElement('input');
     check.type = 'checkbox';
-    check.className = 'check-btn';
-    check.checked = todo.done;
-    check.setAttribute('aria-label', 'Aufgabe abhaken');
-    check.addEventListener('change', () => toggleTodo(todo.id));
+    check.checked = item.done;
+    check.addEventListener('change', () => {
+      item.done = check.checked;
+      label.classList.toggle('checklist-label-done', item.done);
+      save();
+      renderBoard();
+    });
 
-    const span = document.createElement('span');
-    span.className = 'todo-text';
-    span.textContent = todo.text;
+    const label = document.createElement('span');
+    label.className = 'checklist-label' + (item.done ? ' checklist-label-done' : '');
+    label.textContent = item.text;
 
     const del = document.createElement('button');
-    del.className = 'delete-btn';
+    del.className = 'checklist-delete';
     del.textContent = '✕';
-    del.setAttribute('aria-label', 'Aufgabe löschen');
-    del.addEventListener('click', () => deleteTodo(todo.id));
+    del.title = 'Element löschen';
+    del.addEventListener('click', () => {
+      todo.checklist = todo.checklist.filter(i => i.id !== item.id);
+      save();
+      renderBoard();
+      renderChecklist(todo);
+    });
 
-    const children = [handle, dot, check];
-    const cat = todo.category && CATEGORIES[todo.category];
-    if (cat) {
-      const badge = document.createElement('span');
-      badge.className = 'category-badge';
-      badge.textContent = cat.label;
-      badge.style.cssText = `background:${cat.color}28;color:${cat.color};border-color:${cat.color}66`;
-      children.push(badge);
-    }
-    if (todo.dueDate) {
-      const today = todayStr();
-      const [y, m, d] = todo.dueDate.split('-');
-      const dateBadge = document.createElement('span');
-      dateBadge.className = 'due-date-badge'
-        + (todo.dueDate < today ? ' due-overdue' : todo.dueDate === today ? ' due-today' : '');
-      dateBadge.title = 'Fällig: ' + `${d}.${m}.${y}`;
-      dateBadge.textContent = `\uD83D\uDCC5 ${d}.${m}.${y}`;
-      children.push(dateBadge);
-    }
-    children.push(span, del);
-    li.append(...children);
-    list.appendChild(li);
+    row.append(check, label, del);
+    container.appendChild(row);
   });
 }
 
-// ── Events ───────────────────────────────────────────────────
+function renderComments(todo) {
+  const container = document.getElementById('modal-comments-list');
+  container.innerHTML = '';
 
-addBtn.addEventListener('click', () => {
-  addTodo(input.value, categorySelect.value, prioritySelect.value, dueDateInput.value);
-  input.value = '';
-  categorySelect.value = '';
-  prioritySelect.value = '';
-  dueDateInput.value = '';
-  input.focus();
-});
+  (todo.comments || []).slice().reverse().forEach(comment => {
+    const item = document.createElement('div');
+    item.className = 'comment-item';
 
-input.addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    addTodo(input.value, categorySelect.value, prioritySelect.value, dueDateInput.value);
+    const ts = document.createElement('span');
+    ts.className = 'comment-timestamp';
+    ts.textContent = formatTimestamp(comment.timestamp);
+
+    const text = document.createElement('p');
+    text.className = 'comment-text';
+    text.textContent = comment.text;
+
+    const del = document.createElement('button');
+    del.className = 'comment-delete';
+    del.textContent = '✕';
+    del.title = 'Kommentar löschen';
+    del.addEventListener('click', () => {
+      todo.comments = todo.comments.filter(c => c.id !== comment.id);
+      save();
+      renderComments(todo);
+    });
+
+    item.append(del, ts, text);
+    container.appendChild(item);
+  });
+}
+
+// ── Event wiring ─────────────────────────────────────────────
+
+// Add task
+document.getElementById('add-btn').addEventListener('click', () => {
+  const input    = document.getElementById('todo-input');
+  const category = document.getElementById('category-select').value;
+  const priority = document.getElementById('priority-select').value;
+  const dueDate  = document.getElementById('due-date-input').value;
+  if (addTodo(input.value, category, priority, dueDate)) {
     input.value = '';
-    categorySelect.value = '';
-    prioritySelect.value = '';
-    dueDateInput.value = '';
+    document.getElementById('category-select').value = '';
+    document.getElementById('priority-select').value = '';
+    document.getElementById('due-date-input').value = '';
+    input.focus();
   }
 });
 
-sortPriorityBtn.addEventListener('click', () => {
-  sortByPriority = !sortByPriority;
-  render();
+document.getElementById('todo-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('add-btn').click();
 });
 
-filterBtns.forEach(btn => {
-  btn.addEventListener('click', () => {
-    filter = btn.dataset.filter;
-    filterBtns.forEach(b => b.classList.toggle('active', b === btn));
-    render();
-  });
+// Modal close
+document.getElementById('modal-close').addEventListener('click', () => closeModal());
+
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-overlay')) closeModal();
 });
 
-catBtns.forEach(btn => {
-  btn.addEventListener('click', () => {
-    categoryFilter = btn.dataset.cat;
-    render();
-  });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && modalTodoId !== null) closeModal();
 });
 
-clearBtn.addEventListener('click', clearDone);
+// Modal auto-save on blur
+document.getElementById('modal-title').addEventListener('blur', saveModalData);
+document.getElementById('modal-description').addEventListener('blur', saveModalData);
+
+// Move via modal column selector
+document.getElementById('modal-column').addEventListener('change', e => {
+  if (!modalTodoId) return;
+  const todo = todos.find(t => t.id === modalTodoId);
+  if (!todo) return;
+  todo.column = e.target.value;
+  todo.done = e.target.value === 'erledigt';
+  save();
+  renderBoard();
+});
+
+// Add checklist item
+document.getElementById('checklist-add-btn').addEventListener('click', () => {
+  const input = document.getElementById('checklist-input');
+  const text = input.value.trim();
+  if (!text || !modalTodoId) return;
+  const todo = todos.find(t => t.id === modalTodoId);
+  if (!todo) return;
+  todo.checklist.push({ id: Date.now(), text, done: false });
+  save();
+  renderBoard();
+  renderChecklist(todo);
+  input.value = '';
+  input.focus();
+});
+
+document.getElementById('checklist-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('checklist-add-btn').click();
+});
+
+// Add comment
+document.getElementById('comment-add-btn').addEventListener('click', () => {
+  const input = document.getElementById('comment-input');
+  const text = input.value.trim();
+  if (!text || !modalTodoId) return;
+  const todo = todos.find(t => t.id === modalTodoId);
+  if (!todo) return;
+  todo.comments.push({ id: Date.now(), text, timestamp: new Date().toISOString() });
+  save();
+  renderComments(todo);
+  input.value = '';
+  input.focus();
+});
+
+document.getElementById('comment-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    document.getElementById('comment-add-btn').click();
+  }
+});
 
 // ── Init ─────────────────────────────────────────────────────
 
-render();
-input.focus();
+setupColumnDrop();
+renderBoard();
+document.getElementById('todo-input').focus();
