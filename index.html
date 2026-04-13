@@ -21,6 +21,19 @@
         maxlength="200"
         autocomplete="off"
       />
+      <select id="category-select" aria-label="Kategorie">
+        <option value="">– Kategorie –</option>
+        <option value="work">Arbeit</option>
+        <option value="private">Privat</option>
+        <option value="shopping">Shopping</option>
+      </select>
+      <select id="priority-select" aria-label="Priorität">
+        <option value="">– Priorität –</option>
+        <option value="high">Hoch</option>
+        <option value="medium">Mittel</option>
+        <option value="low">Niedrig</option>
+      </select>
+      <input type="date" id="due-date-input" aria-label="Fälligkeitsdatum" />
       <button id="add-btn" aria-label="Hinzufügen">+</button>
     </div>
 
@@ -28,6 +41,14 @@
       <button class="filter-btn active" data-filter="all">Alle</button>
       <button class="filter-btn" data-filter="open">Offen</button>
       <button class="filter-btn" data-filter="done">Erledigt</button>
+      <button id="sort-priority-btn" class="filter-btn sort-btn" title="Nach Priorität sortieren">&#8597; Priorität</button>
+    </div>
+
+    <div class="category-filter-row">
+      <button class="cat-btn active" data-cat="all">Alle Kategorien</button>
+      <button class="cat-btn" data-cat="work">Arbeit</button>
+      <button class="cat-btn" data-cat="private">Privat</button>
+      <button class="cat-btn" data-cat="shopping">Shopping</button>
     </div>
 
     <ul id="todo-list"></ul>
