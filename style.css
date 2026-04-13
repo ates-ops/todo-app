@@ -20,6 +20,24 @@
   --shadow:    0 8px 32px rgba(0,0,0,.55);
 }
 
+/* ── Light theme ── */
+[data-theme="light"] {
+  --bg:       #f0f2f8;
+  --surface:  #ffffff;
+  --surface2: #f4f5fa;
+  --surface3: #e8eaf2;
+  --border:   #d0d4e8;
+  --text:     #1a1d27;
+  --muted:    #8188aa;
+  --done-text:#adb5d4;
+  --shadow:   0 8px 32px rgba(0,0,0,.10);
+}
+
+[data-theme="light"] #due-date-input::-webkit-calendar-picker-indicator {
+  filter: none;
+  opacity: 0.55;
+}
+
 html, body {
   height: 100%;
 }
@@ -128,6 +146,32 @@ body {
 }
 #add-btn:hover  { background: var(--accent-h); }
 #add-btn:active { transform: scale(.96); }
+
+/* ── Theme toggle ── */
+.header-actions {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+#theme-toggle {
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  transition: border-color .2s, color .2s, background .2s;
+}
+#theme-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--surface3);
+}
 
 /* ── Kanban Board ── */
 .kanban-board {

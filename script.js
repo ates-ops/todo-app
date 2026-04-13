@@ -495,6 +495,29 @@ document.getElementById('comment-input').addEventListener('keydown', e => {
   }
 });
 
+// ── Theme ─────────────────────────────────────────────────────
+
+const THEME_KEY = 'kanban_theme';
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const isDark = theme === 'dark';
+  document.getElementById('icon-sun').style.display  = isDark ? '' : 'none';
+  document.getElementById('icon-moon').style.display = isDark ? 'none' : '';
+}
+
+(function initTheme() {
+  const saved = localStorage.getItem(THEME_KEY) || 'dark';
+  applyTheme(saved);
+})();
+
+document.getElementById('theme-toggle').addEventListener('click', () => {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  const next = current === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  localStorage.setItem(THEME_KEY, next);
+});
+
 // ── Init ─────────────────────────────────────────────────────
 
 setupColumnDrop();
