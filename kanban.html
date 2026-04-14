@@ -1,298 +1,547 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" data-theme="light">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Executive Flow | Kanban</title>
+<title>Ates-Board</title>
 
-<!-- ① Tailwind config MUST come before the CDN script -->
-<script>
-  tailwind.config = {
-    theme: {
-      extend: {
-        fontFamily: { headline: ['Manrope','sans-serif'], body: ['Inter','sans-serif'] }
-      }
-    }
-  }
-</script>
-<!-- ② Tailwind CDN -->
+<!-- ① Tailwind config BEFORE CDN -->
+<script>tailwind.config = { theme: { extend: { fontFamily: { headline: ['Manrope','sans-serif'] } } } }</script>
 <script src="https://cdn.tailwindcss.com"></script>
 
-<!-- ③ Google Fonts -->
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+<!-- ② Fonts + Icons -->
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
 
-<!-- ④ Firebase 10 Compat CDN – NO npm needed -->
+<!-- ③ Firebase 10 Compat CDN – no npm needed -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 
 <style>
-  /* Icons */
-  .icon { font-family:'Material Symbols Outlined'; font-style:normal; font-weight:400;
-          font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;
-          vertical-align:middle; line-height:1; display:inline-block; }
-  .icon-fill { font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24; }
+/* ── CSS Variables (light / dark) ──────────────────────────────── */
+:root {
+  --bg:       #f1f5f9;
+  --surface:  #ffffff;
+  --surface2: #f8fafc;
+  --border:   #e2e8f0;
+  --text:     #1e293b;
+  --muted:    #64748b;
+  --accent:   #003466;
+  --accent2:  #1a4b84;
+  --card-sh:  0 2px 12px rgba(0,0,0,.07);
+}
+html[data-theme="dark"] {
+  --bg:       #0f172a;
+  --surface:  #1e293b;
+  --surface2: #162032;
+  --border:   #334155;
+  --text:     #f1f5f9;
+  --muted:    #94a3b8;
+  --accent:   #3b82f6;
+  --accent2:  #2563eb;
+  --card-sh:  0 2px 16px rgba(0,0,0,.4);
+}
 
-  /* Board switcher */
-  #board-switcher { display:flex; gap:10px; align-items:center; }
-  .bsw-btn {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 10px 22px; border-radius: 999px;
-    font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 14px;
-    cursor: pointer; border: 2px solid transparent;
-    transition: all 0.18s ease; white-space: nowrap;
-    background: #e8edf5; color: #003466;
-  }
-  .bsw-btn:hover { background: #d5e1f5; }
-  .bsw-btn.active {
-    background: #003466; color: #ffffff;
-    box-shadow: 0 4px 16px rgba(0,52,102,0.28);
-  }
-  .bsw-btn.active:hover { background: #1a4b84; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); transition: background .2s, color .2s; }
 
-  /* Sync dot */
-  .sync-dot { width:9px; height:9px; border-radius:50%; display:inline-block; flex-shrink:0; }
-  .sync-live { background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,.25); animation:glow 2s infinite; }
-  .sync-offline { background:#94a3b8; }
-  .sync-connecting { background:#f59e0b; animation:glow 1s infinite; }
-  @keyframes glow {
-    0%,100% { box-shadow:0 0 0 3px rgba(34,197,94,.2); }
-    50%      { box-shadow:0 0 0 6px rgba(34,197,94,.08); }
-  }
+/* Material Symbols */
+.icon { font-family:'Material Symbols Outlined'; font-style:normal; font-weight:400;
+        font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;
+        vertical-align:middle; line-height:1; display:inline-block; user-select:none; }
+.fill { font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24; }
 
-  /* Cards */
-  .card { cursor:grab; transition:transform .15s,box-shadow .15s; }
-  .card:active { cursor:grabbing; }
-  .card.dragging { opacity:.3; transform:scale(.96); }
-  .drop-col { min-height:80px; transition:background .15s; border-radius:12px; }
-  .drop-col.drag-over { background:rgba(0,52,102,.06); outline:2px dashed #a6c8ff; }
-  .drop-placeholder { height:68px; border:2px dashed #a6c8ff; border-radius:10px;
-                      background:rgba(0,52,102,.04); pointer-events:none; }
-  /* Badge colours */
-  .pr-high   { background:#ffdad6; color:#93000a; }
-  .pr-medium { background:#ffdeac; color:#3a2500; }
-  .pr-low    { background:#e0e5ec; color:#424750; }
+/* ── 8-Ball ─────────────────────────────────────────────────────── */
+.eight-ball {
+  width:48px; height:48px; border-radius:50%; flex-shrink:0;
+  background: radial-gradient(circle at 38% 35%, #2d2d2d 0%, #000 70%);
+  box-shadow: inset -3px -3px 7px rgba(255,255,255,.14),
+              inset 2px 2px 6px rgba(0,0,0,.9),
+              0 4px 18px rgba(0,0,0,.7);
+  display:flex; align-items:center; justify-content:center;
+}
+.eight-ball .inner {
+  width:20px; height:20px; border-radius:50%;
+  background: radial-gradient(circle at 38% 38%, #fff 0%, #ddd 100%);
+  display:flex; align-items:center; justify-content:center;
+  font-family:'Manrope',sans-serif; font-weight:900; font-size:11px; color:#000;
+}
 
-  /* Modal */
-  .overlay { position:fixed;inset:0;background:rgba(10,15,25,.5);
-             backdrop-filter:blur(5px);display:flex;align-items:center;
-             justify-content:center;z-index:200; }
+/* ── Sidebar ─────────────────────────────────────────────────────── */
+.sidebar {
+  position:fixed; left:0; top:0; height:100vh; width:240px;
+  display:flex; flex-direction:column;
+  background:var(--surface); border-right:1px solid var(--border);
+  z-index:50; transition:background .2s, border-color .2s;
+}
 
-  /* Error banner */
-  #fb-error { display:none; margin:12px 32px 0; padding:12px 16px;
-              background:#fff0f0; border:1px solid #fca5a5;
-              border-radius:10px; color:#b91c1c; font-size:13px; }
+/* 8-ball hero brand area */
+.brand {
+  padding:24px 20px 20px;
+  background: linear-gradient(160deg, #040404 0%, #0d1117 55%, #13142a 100%);
+  position:relative; overflow:hidden; flex-shrink:0;
+}
+.brand::before {
+  content:''; position:absolute; inset:0;
+  background-image: radial-gradient(circle, rgba(255,255,255,.05) 1px, transparent 1px);
+  background-size:16px 16px;
+}
+.brand::after {
+  content:''; position:absolute;
+  width:110px; height:110px; border-radius:50%;
+  background: radial-gradient(circle at 36% 34%, #2a2a2a, #000);
+  box-shadow: inset -4px -4px 10px rgba(255,255,255,.08), inset 4px 4px 10px rgba(0,0,0,.8);
+  right:-30px; bottom:-30px; opacity:.45;
+}
+.brand-inner { position:relative; z-index:1; display:flex; align-items:center; gap:13px; }
+.brand-text h1 { font-family:'Manrope',sans-serif; font-weight:900; font-size:21px;
+                  letter-spacing:-.5px; color:#fff; }
+.brand-text p  { font-size:10px; font-weight:700; letter-spacing:.18em;
+                  text-transform:uppercase; color:rgba(255,255,255,.38); margin-top:3px; }
 
-  /* Scrollbar */
-  ::-webkit-scrollbar { width:5px; height:5px; }
-  ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:4px; }
+/* Nav */
+.nav { flex:1; padding:10px; display:flex; flex-direction:column; gap:2px; overflow-y:auto; }
+.ni {
+  display:flex; align-items:center; gap:11px; padding:10px 13px;
+  border-radius:10px; font-size:13px; font-weight:600; cursor:pointer;
+  transition:all .15s; color:var(--muted); border-right:3px solid transparent;
+}
+.ni:hover { background:var(--bg); color:var(--text); }
+.ni.active { background:rgba(0,52,102,.1); color:var(--accent); border-right-color:var(--accent); }
+html[data-theme="dark"] .ni.active { background:rgba(59,130,246,.15); }
+
+/* ── Board Switcher ──────────────────────────────────────────────── */
+.bsw { display:flex; gap:8px; }
+.bsw-btn {
+  display:inline-flex; align-items:center; gap:7px;
+  padding:9px 18px; border-radius:999px; cursor:pointer;
+  font-family:'Manrope',sans-serif; font-weight:700; font-size:13px;
+  border:2px solid transparent; transition:all .18s; white-space:nowrap;
+  background:var(--bg); color:var(--muted);
+}
+.bsw-btn:hover { color:var(--text); }
+.bsw-btn.active { background:var(--accent); color:#fff; box-shadow:0 4px 14px rgba(0,52,102,.25); }
+html[data-theme="dark"] .bsw-btn.active { box-shadow:0 4px 14px rgba(59,130,246,.3); }
+
+/* ── Icon button ─────────────────────────────────────────────────── */
+.ibtn {
+  padding:7px; border-radius:50%; cursor:pointer; border:none;
+  background:transparent; color:var(--muted); transition:all .15s;
+  display:inline-flex; align-items:center; justify-content:center;
+}
+.ibtn:hover { background:var(--bg); color:var(--text); }
+.ibtn.on { background:var(--accent); color:#fff; }
+
+/* ── Sync dot ────────────────────────────────────────────────────── */
+.dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.dot-live { background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,.25); animation:glow 2s infinite; }
+.dot-off  { background:#94a3b8; }
+.dot-con  { background:#f59e0b; animation:glow 1s infinite; }
+@keyframes glow {
+  0%,100% { box-shadow:0 0 0 3px rgba(34,197,94,.2); }
+  50%      { box-shadow:0 0 0 6px rgba(34,197,94,.06); }
+}
+
+/* ── Kanban cards ────────────────────────────────────────────────── */
+.kcard {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:12px; padding:15px 17px;
+  box-shadow:var(--card-sh); cursor:grab;
+  transition:transform .15s, box-shadow .15s;
+}
+.kcard:active { cursor:grabbing; }
+.kcard.dragging { opacity:.3; transform:scale(.96); }
+.drop-col { min-height:80px; border-radius:12px; transition:background .15s; }
+.drop-col.dov { background:rgba(0,100,255,.04); outline:2px dashed #93c5fd; }
+.dph { height:66px; border:2px dashed #93c5fd; border-radius:10px;
+       background:rgba(59,130,246,.04); pointer-events:none; }
+
+/* Priority badges */
+.pr-h { background:#ffdad6; color:#93000a; }
+.pr-m { background:#ffdeac; color:#3a2500; }
+.pr-l { background:#e0e5ec; color:#424750; }
+html[data-theme="dark"] .pr-h { background:rgba(186,26,26,.3); color:#ffb4ab; }
+html[data-theme="dark"] .pr-m { background:rgba(71,47,0,.4);   color:#ffdeac; }
+html[data-theme="dark"] .pr-l { background:rgba(50,60,80,.5);   color:#c0c8d8; }
+
+/* ── Calendar ────────────────────────────────────────────────────── */
+.cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+.cal-dh { text-align:center; font-size:11px; font-weight:700; color:var(--muted);
+           padding:6px 0; text-transform:uppercase; }
+.cal-d {
+  min-height:80px; background:var(--surface); border:1px solid var(--border);
+  border-radius:9px; padding:7px; cursor:pointer; transition:all .15s;
+}
+.cal-d:hover  { border-color:var(--accent); }
+.cal-d.today  { border-color:var(--accent); background:rgba(0,52,102,.04); }
+.cal-d.sel    { border-color:var(--accent); background:rgba(0,52,102,.09);
+                box-shadow:0 0 0 2px rgba(0,52,102,.18); }
+.cal-d.other  { opacity:.32; }
+html[data-theme="dark"] .cal-d.today { background:rgba(59,130,246,.1); }
+html[data-theme="dark"] .cal-d.sel   { background:rgba(59,130,246,.15); }
+.cal-num { font-size:12px; font-weight:700; color:var(--text); margin-bottom:4px; }
+.cal-d.today .cal-num {
+  background:var(--accent); color:#fff; width:22px; height:22px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; font-size:11px;
+}
+.cal-chip {
+  font-size:10px; font-weight:600; padding:2px 5px; border-radius:4px;
+  margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+
+/* ── Checklist items ─────────────────────────────────────────────── */
+.cl-item {
+  display:flex; align-items:center; gap:10px;
+  padding:9px 12px; background:var(--surface2); border:1px solid var(--border);
+  border-radius:9px; transition:all .15s; cursor:grab;
+}
+.cl-item:active { cursor:grabbing; }
+.cl-item.dragging { opacity:.3; }
+.cl-item.done-item .cl-text { text-decoration:line-through; color:var(--muted); }
+
+/* ── Overlay / Modal ─────────────────────────────────────────────── */
+.overlay {
+  position:fixed; inset:0; background:rgba(5,15,30,.55);
+  backdrop-filter:blur(5px); display:none; align-items:center;
+  justify-content:center; z-index:200;
+}
+.modal {
+  background:var(--surface); border-radius:16px; padding:28px;
+  width:100%; max-width:480px;
+  box-shadow:0 24px 64px rgba(0,0,0,.22); border:1px solid var(--border);
+}
+
+/* ── Toast ───────────────────────────────────────────────────────── */
+#toasts {
+  position:fixed; bottom:24px; right:24px; z-index:300;
+  display:flex; flex-direction:column; gap:8px;
+}
+.toast {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:12px; padding:12px 16px; min-width:260px; max-width:360px;
+  box-shadow:0 8px 24px rgba(0,0,0,.16);
+  display:flex; align-items:flex-start; gap:10px;
+  font-size:13px; color:var(--text); animation:tin .22s ease;
+}
+@keyframes tin {
+  from { transform:translateX(110%); opacity:0; }
+  to   { transform:translateX(0);   opacity:1; }
+}
+
+/* ── Error banner ────────────────────────────────────────────────── */
+#fb-err {
+  display:none; margin:10px 24px 0; padding:11px 15px;
+  background:#fff0f0; border:1px solid #fca5a5; border-radius:10px;
+  color:#b91c1c; font-size:13px;
+}
+html[data-theme="dark"] #fb-err {
+  background:rgba(185,28,28,.2); border-color:rgba(252,165,165,.3); color:#fca5a5;
+}
+
+/* ── Form inputs ─────────────────────────────────────────────────── */
+.fi {
+  width:100%; padding:10px 13px; border:1px solid var(--border);
+  border-radius:10px; background:var(--surface2); color:var(--text);
+  font-size:13px; font-family:'Inter',sans-serif; transition:border-color .15s;
+}
+.fi:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(0,52,102,.1); }
+html[data-theme="dark"] .fi:focus { box-shadow:0 0 0 3px rgba(59,130,246,.15); }
+
+::-webkit-scrollbar { width:5px; }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
 </style>
 </head>
 
-<body class="bg-slate-100 text-slate-800 flex min-h-screen" style="font-family:'Inter',sans-serif;">
+<body>
 
-<!-- ═══════════════════════════════════════════════════════════════════════
+<!-- ═══════════════════════════════════════════════════════════════
      SIDEBAR
-════════════════════════════════════════════════════════════════════════ -->
-<aside class="fixed left-0 top-0 h-screen w-60 flex flex-col py-6 bg-white border-r border-slate-200 z-50 shadow-sm">
+════════════════════════════════════════════════════════════════ -->
+<aside class="sidebar">
 
-  <!-- Logo -->
-  <div class="px-5 mb-8 flex items-center gap-3">
-    <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white"
-         style="background:linear-gradient(135deg,#003466,#1a4b84)">
-      <span class="icon icon-fill" style="font-size:22px">architecture</span>
-    </div>
-    <div>
-      <div style="font-family:'Manrope',sans-serif;font-weight:900;font-size:15px;color:#003466;letter-spacing:-.5px;">The Sanctuary</div>
-      <div class="text-slate-400" style="font-size:10px;letter-spacing:.15em;font-weight:700;text-transform:uppercase;">Deep Work Mode</div>
+  <!-- 8-ball hero brand -->
+  <div class="brand">
+    <div class="brand-inner">
+      <div class="eight-ball"><div class="inner">8</div></div>
+      <div class="brand-text">
+        <h1>Ates-Board</h1>
+        <p>Kanban Workspace</p>
+      </div>
     </div>
   </div>
 
-  <!-- Nav -->
-  <nav class="flex-1 px-3 space-y-1">
-    <div class="flex items-center gap-3 px-4 py-3 rounded-lg font-semibold text-sm cursor-pointer"
-         style="color:#003466;background:#e8edf5;border-right:3px solid #003466;">
-      <span class="icon">folder_open</span> Boards
+  <!-- Navigation -->
+  <nav class="nav">
+    <div class="ni active" id="ni-board" onclick="switchView('board')">
+      <span class="icon">view_kanban</span> Boards
     </div>
-    <div class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-500 hover:bg-slate-100 font-semibold text-sm cursor-pointer transition-colors">
-      <span class="icon">assignment</span> Aufgaben
+    <div class="ni" id="ni-tasks" onclick="switchView('tasks')">
+      <span class="icon">checklist</span> Aufgaben
     </div>
-    <div class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-500 hover:bg-slate-100 font-semibold text-sm cursor-pointer transition-colors">
-      <span class="icon">calendar_today</span> Kalender
+    <div class="ni" id="ni-calendar" onclick="switchView('calendar')">
+      <span class="icon">calendar_month</span> Kalender
     </div>
-    <div class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-500 hover:bg-slate-100 font-semibold text-sm cursor-pointer transition-colors">
+    <div class="ni" id="ni-settings">
       <span class="icon">settings</span> Einstellungen
     </div>
   </nav>
 
-  <!-- New card btn -->
-  <div class="px-4 mt-auto">
-    <button onclick="openModal()"
-      class="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-95"
-      style="background:#003466;color:#fff;font-family:'Manrope',sans-serif;">
+  <!-- New card button -->
+  <div style="padding:0 12px 20px;">
+    <button onclick="openCardModal()"
+      style="width:100%;padding:12px;border-radius:12px;background:var(--accent);color:#fff;
+             font-family:'Manrope',sans-serif;font-weight:700;font-size:13px;cursor:pointer;
+             display:flex;align-items:center;justify-content:center;gap:8px;border:none;
+             transition:opacity .15s;"
+      onmouseover="this.style.opacity='.82'" onmouseout="this.style.opacity='1'">
       <span class="icon">add</span> Neue Karte
     </button>
   </div>
 </aside>
 
-<!-- ═══════════════════════════════════════════════════════════════════════
-     MAIN CONTENT
-════════════════════════════════════════════════════════════════════════ -->
-<div class="flex-1 flex flex-col min-h-screen" style="margin-left:240px;">
+<!-- ═══════════════════════════════════════════════════════════════
+     MAIN
+════════════════════════════════════════════════════════════════ -->
+<div style="margin-left:240px;display:flex;flex-direction:column;min-height:100vh;">
 
-  <!-- ── Top bar (logo row) ───────────────────────────────────────────── -->
-  <div class="flex items-center justify-between px-8 py-4 bg-white border-b border-slate-200"
-       style="position:sticky;top:0;z-index:40;">
-    <span style="font-family:'Manrope',sans-serif;font-weight:800;font-size:18px;color:#003466;">
+  <!-- Top bar -->
+  <div style="position:sticky;top:0;z-index:40;background:var(--surface);
+              border-bottom:1px solid var(--border);padding:11px 26px;
+              display:flex;align-items:center;justify-content:space-between;
+              transition:background .2s,border-color .2s;">
+    <span style="font-family:'Manrope',sans-serif;font-weight:900;font-size:17px;color:var(--text);">
       Executive Flow
     </span>
-    <div class="flex items-center gap-3">
-      <button class="p-2 rounded-full hover:bg-slate-100 text-slate-400 transition-colors">
-        <span class="icon">notifications</span>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <!-- Dark / Light toggle -->
+      <button id="btn-theme" class="ibtn" onclick="toggleTheme()" title="Design wechseln">
+        <span id="theme-icon" class="icon" style="font-size:21px;">light_mode</span>
       </button>
-      <div class="h-9 w-9 rounded-full flex items-center justify-center text-white text-sm font-bold"
-           style="background:linear-gradient(135deg,#003466,#1a4b84);">BA</div>
+      <!-- Notification toggle -->
+      <button id="btn-notif" class="ibtn" onclick="toggleNotifs()" title="Benachrichtigungen">
+        <span id="notif-icon" class="icon" style="font-size:21px;">notifications</span>
+      </button>
+      <!-- Avatar -->
+      <div style="width:34px;height:34px;border-radius:50%;
+                  background:linear-gradient(135deg,#003466,#1a4b84);
+                  display:flex;align-items:center;justify-content:center;
+                  color:#fff;font-weight:700;font-size:12px;margin-left:4px;cursor:pointer;">
+        BA
+      </div>
     </div>
   </div>
 
-  <!-- ══════════════════════════════════════════════════════════════════
-       BOARD SWITCHER  ← prominent dedicated bar
-  ═══════════════════════════════════════════════════════════════════ -->
-  <div style="background:#fff;border-bottom:2px solid #e2e8f0;padding:14px 32px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:65px;z-index:39;">
-
-    <div id="board-switcher">
-      <button id="btn-personal" class="bsw-btn active" onclick="switchBoard('personal')">
-        <span class="icon" style="font-size:18px;">person</span>
+  <!-- Board Switcher bar -->
+  <div style="background:var(--surface);border-bottom:2px solid var(--border);
+              padding:12px 26px;display:flex;align-items:center;justify-content:space-between;
+              position:sticky;top:60px;z-index:39;transition:background .2s,border-color .2s;">
+    <div class="bsw">
+      <button id="btn-p" class="bsw-btn active" onclick="switchBoard('personal')">
+        <span class="icon" style="font-size:17px;">person</span>
         Mein Board
       </button>
-
-      <button id="btn-shared" class="bsw-btn" onclick="switchBoard('shared')">
-        <span class="icon" style="font-size:18px;">group</span>
+      <button id="btn-s" class="bsw-btn" onclick="switchBoard('shared')">
+        <span class="icon" style="font-size:17px;">group</span>
         Geteiltes Board
-        <span id="sync-dot" class="sync-dot sync-offline" title="Offline"></span>
+        <span id="sync-dot" class="dot dot-off" title="Offline"></span>
       </button>
     </div>
-
-    <!-- Status pill -->
     <div id="board-status"
-         style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:999px;background:#f1f5f9;color:#64748b;">
+      style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:999px;
+             background:var(--bg);color:var(--muted);">
       Lokal gespeichert
     </div>
   </div>
 
   <!-- Firebase error banner -->
-  <div id="fb-error">
-    <strong>Firebase-Fehler:</strong> <span id="fb-error-msg"></span>
-    <div style="margin-top:4px;font-size:11px;color:#dc2626;">Details in der Browser-Konsole (F12 → Console)</div>
+  <div id="fb-err">
+    <strong>Firebase-Fehler:</strong> <span id="fb-err-msg"></span>
+    <div style="margin-top:4px;font-size:11px;">Details in Konsole (F12 → Console)</div>
   </div>
 
-  <!-- ── Page header ─────────────────────────────────────────────────── -->
-  <main class="flex-1 p-8">
-    <div class="flex items-end justify-between mb-8">
+  <!-- Content -->
+  <main style="flex:1;padding:24px 28px;">
+
+    <!-- Page header -->
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:22px;">
       <div>
-        <div class="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Produktivitäts-Board</div>
+        <div id="page-sub" style="font-size:11px;font-weight:700;text-transform:uppercase;
+                                   letter-spacing:.1em;color:var(--muted);margin-bottom:4px;">
+          Produktivitäts-Board
+        </div>
         <h1 id="board-title"
-            style="font-family:'Manrope',sans-serif;font-weight:900;font-size:36px;color:#003466;line-height:1.1;">
+          style="font-family:'Manrope',sans-serif;font-weight:900;font-size:30px;color:var(--accent);">
           Mein Board
         </h1>
       </div>
-      <button onclick="openModal()"
-        class="flex items-center gap-2 rounded-xl px-5 py-2.5 font-semibold text-sm text-white transition-all active:scale-95 hover:opacity-90"
-        style="background:#003466;">
+      <button id="add-card-btn" onclick="openCardModal()"
+        style="display:flex;align-items:center;gap:7px;padding:10px 20px;border-radius:12px;
+               background:var(--accent);color:#fff;font-family:'Manrope',sans-serif;
+               font-weight:700;font-size:13px;cursor:pointer;border:none;transition:opacity .15s;"
+        onmouseover="this.style.opacity='.82'" onmouseout="this.style.opacity='1'">
         <span class="icon">add_circle</span> Karte hinzufügen
       </button>
     </div>
 
-    <!-- Kanban board -->
-    <div id="board" class="grid gap-6" style="grid-template-columns:repeat(3,minmax(0,1fr));align-items:start;"></div>
+    <!-- BOARD VIEW -->
+    <div id="v-board"
+      style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:start;">
+    </div>
+
+    <!-- CALENDAR VIEW -->
+    <div id="v-calendar" style="display:none;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+        <button onclick="calNav(-1)" class="ibtn" style="border:1px solid var(--border);">
+          <span class="icon">chevron_left</span>
+        </button>
+        <h2 id="cal-lbl"
+          style="font-family:'Manrope',sans-serif;font-weight:800;font-size:19px;
+                 color:var(--text);min-width:190px;text-align:center;"></h2>
+        <button onclick="calNav(1)" class="ibtn" style="border:1px solid var(--border);">
+          <span class="icon">chevron_right</span>
+        </button>
+        <button onclick="calGotoToday()"
+          style="padding:6px 14px;border-radius:8px;background:var(--bg);border:1px solid var(--border);
+                 font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;">Heute</button>
+      </div>
+      <div style="display:flex;gap:18px;align-items:flex-start;">
+        <div style="flex:1;"><div class="cal-grid" id="cal-grid"></div></div>
+        <div id="cal-detail"
+          style="width:270px;background:var(--surface);border:1px solid var(--border);
+                 border-radius:14px;padding:18px;display:none;flex-shrink:0;">
+          <h3 id="cal-dtitle"
+            style="font-family:'Manrope',sans-serif;font-weight:800;font-size:15px;
+                   color:var(--text);margin-bottom:12px;"></h3>
+          <div id="cal-dcards"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TASKS / CHECKLIST VIEW -->
+    <div id="v-tasks" style="display:none;max-width:640px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <h2 style="font-family:'Manrope',sans-serif;font-weight:800;font-size:19px;color:var(--text);">
+          Checklisten
+        </h2>
+        <button onclick="openClModal()"
+          style="display:flex;align-items:center;gap:6px;padding:9px 18px;border-radius:10px;
+                 background:var(--accent);color:#fff;font-family:'Manrope',sans-serif;
+                 font-weight:700;font-size:13px;cursor:pointer;border:none;">
+          <span class="icon">add</span> Neue Liste
+        </button>
+      </div>
+      <div id="cl-wrap"></div>
+    </div>
+
   </main>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════════════════
-     MODAL – Add / Edit card
-════════════════════════════════════════════════════════════════════════ -->
-<div id="modal" class="overlay" style="display:none;" onclick="closeModal()">
-  <div onclick="event.stopPropagation()"
-       style="background:#fff;border-radius:16px;padding:32px;width:100%;max-width:460px;box-shadow:0 24px 64px rgba(0,0,0,.18);">
+<!-- Toast container -->
+<div id="toasts"></div>
 
-    <div class="flex items-center justify-between mb-6">
-      <h2 id="modal-title"
-          style="font-family:'Manrope',sans-serif;font-weight:800;font-size:20px;color:#003466;">
+<!-- ═══════════════════════════════════════════════════════════════
+     CARD MODAL
+════════════════════════════════════════════════════════════════ -->
+<div id="card-modal" class="overlay" onclick="closeCardModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h2 id="card-modal-title"
+        style="font-family:'Manrope',sans-serif;font-weight:800;font-size:18px;color:var(--accent);">
         Neue Karte
       </h2>
-      <button onclick="closeModal()"
-        class="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 transition-colors">
-        <span class="icon">close</span>
-      </button>
+      <button onclick="closeCardModal()" class="ibtn"><span class="icon">close</span></button>
     </div>
-
-    <div class="space-y-4">
+    <div style="display:flex;flex-direction:column;gap:13px;">
       <div>
-        <label class="block text-sm font-semibold text-slate-500 mb-1">Titel *</label>
-        <input id="inp-title" type="text" placeholder="Aufgabentitel eingeben…"
-          class="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:border-blue-400 transition-all"
-          onkeydown="if(event.key==='Enter')saveCard()"/>
+        <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px;">Titel *</label>
+        <input id="c-title" class="fi" type="text" placeholder="Aufgabentitel…" onkeydown="if(event.key==='Enter')saveCard()"/>
       </div>
       <div>
-        <label class="block text-sm font-semibold text-slate-500 mb-1">Beschreibung</label>
-        <textarea id="inp-desc" rows="3" placeholder="Optionale Beschreibung…"
-          class="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:border-blue-400 transition-all resize-none"></textarea>
+        <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px;">Beschreibung</label>
+        <textarea id="c-desc" class="fi" rows="3" placeholder="Optionale Beschreibung…" style="resize:none;"></textarea>
       </div>
-      <div class="grid grid-cols-2 gap-4">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         <div>
-          <label class="block text-sm font-semibold text-slate-500 mb-1">Priorität</label>
-          <select id="inp-priority"
-            class="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none bg-white">
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px;">Priorität</label>
+          <select id="c-prio" class="fi">
             <option value="high">Hoch</option>
             <option value="medium" selected>Mittel</option>
             <option value="low">Niedrig</option>
           </select>
         </div>
         <div>
-          <label class="block text-sm font-semibold text-slate-500 mb-1">Spalte</label>
-          <select id="inp-column"
-            class="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none bg-white">
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px;">Spalte</label>
+          <select id="c-col" class="fi">
             <option value="todo">Zu erledigen</option>
             <option value="inprogress">In Bearbeitung</option>
             <option value="done">Fertig</option>
           </select>
         </div>
       </div>
+      <div>
+        <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px;">Fälligkeitsdatum</label>
+        <input id="c-due" class="fi" type="date"/>
+      </div>
     </div>
-
-    <div class="flex gap-3 mt-6">
-      <button onclick="closeModal()"
-        class="flex-1 py-3 border border-slate-300 rounded-xl font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
-        Abbrechen
-      </button>
+    <div style="display:flex;gap:10px;margin-top:20px;">
+      <button onclick="closeCardModal()"
+        style="flex:1;padding:11px;border-radius:10px;border:1px solid var(--border);
+               background:transparent;color:var(--muted);font-family:'Manrope',sans-serif;
+               font-weight:700;cursor:pointer;">Abbrechen</button>
       <button onclick="saveCard()"
-        class="flex-1 py-3 rounded-xl font-semibold text-white transition-all active:scale-95 hover:opacity-90"
-        style="background:#003466;">
+        style="flex:1;padding:11px;border-radius:10px;background:var(--accent);color:#fff;
+               font-family:'Manrope',sans-serif;font-weight:700;cursor:pointer;border:none;">
         Speichern
       </button>
     </div>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════════════════
+<!-- ═══════════════════════════════════════════════════════════════
+     CHECKLIST MODAL
+════════════════════════════════════════════════════════════════ -->
+<div id="cl-modal" class="overlay" onclick="closeClModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h2 style="font-family:'Manrope',sans-serif;font-weight:800;font-size:18px;color:var(--accent);">
+        Neue Checkliste
+      </h2>
+      <button onclick="closeClModal()" class="ibtn"><span class="icon">close</span></button>
+    </div>
+    <div>
+      <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px;">Titel *</label>
+      <input id="cl-title" class="fi" type="text" placeholder="Checklisten-Titel…" onkeydown="if(event.key==='Enter')saveCl()"/>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:20px;">
+      <button onclick="closeClModal()"
+        style="flex:1;padding:11px;border-radius:10px;border:1px solid var(--border);
+               background:transparent;color:var(--muted);font-family:'Manrope',sans-serif;
+               font-weight:700;cursor:pointer;">Abbrechen</button>
+      <button onclick="saveCl()"
+        style="flex:1;padding:11px;border-radius:10px;background:var(--accent);color:#fff;
+               font-family:'Manrope',sans-serif;font-weight:700;cursor:pointer;border:none;">
+        Erstellen
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
      JAVASCRIPT
-════════════════════════════════════════════════════════════════════════ -->
+════════════════════════════════════════════════════════════════ -->
 <script>
 'use strict';
 
-// ─── Helpers ─────────────────────────────────────────────────────────────
-function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-}
+// ── Helpers ──────────────────────────────────────────────────────
+function uid()    { return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
 function clone(o) { return JSON.parse(JSON.stringify(o)); }
-function esc(s) {
-  return String(s ?? '')
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function esc(s)   {
+  return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ─── Firebase ────────────────────────────────────────────────────────────
-const FB_CONFIG = {
+// ── Firebase ─────────────────────────────────────────────────────
+const FB_CFG = {
   apiKey:            "AIzaSyDC8TKNm753-PcnS8s_9fw8E7btbFCNTUw",
   authDomain:        "ates-kanban.firebaseapp.com",
   projectId:         "ates-kanban",
@@ -301,459 +550,633 @@ const FB_CONFIG = {
   appId:             "1:707150567054:web:ca6d36423be1458d821bdf"
 };
 
-let db         = null;
-let sharedDoc  = null;
-let unsubscribe = null;
+let db = null, sdoc = null, unsub = null;
 
-(function initFirebase() {
+(function initFB() {
   if (typeof firebase === 'undefined') {
-    console.error('[Firebase] ❌ firebase global nicht gefunden – CDN-Skript nicht geladen.');
+    console.error('[Firebase] ❌ CDN nicht geladen – Internetverbindung prüfen.');
     return;
   }
   try {
-    firebase.initializeApp(FB_CONFIG);
-    db        = firebase.firestore();
-    sharedDoc = db.collection('boards').doc('shared');
-    console.log('[Firebase] ✅ App initialisiert – Projekt:', FB_CONFIG.projectId);
+    firebase.initializeApp(FB_CFG);
+    db   = firebase.firestore();
+    sdoc = db.collection('boards').doc('shared');
+    console.log('[Firebase] ✅ Initialisiert – Projekt:', FB_CFG.projectId);
     console.log('[Firebase] ✅ Firestore bereit – Ziel: boards/shared');
-  } catch (e) {
-    console.error('[Firebase] ❌ Initialisierung fehlgeschlagen:', e.message);
-  }
+  } catch(e) { console.error('[Firebase] ❌ Init-Fehler:', e.message); }
 })();
 
-// ─── Data model ──────────────────────────────────────────────────────────
+// ── Data model ───────────────────────────────────────────────────
 const COLS = [
-  { id:'todo',       label:'Zu erledigen',   headColor:'#003466' },
-  { id:'inprogress', label:'In Bearbeitung',  headColor:'#5c3a00' },
-  { id:'done',       label:'Fertig',          headColor:'#1a4b84' },
+  { id:'todo',       label:'Zu erledigen',   color:'#003466' },
+  { id:'inprogress', label:'In Bearbeitung',  color:'#7c4a00' },
+  { id:'done',       label:'Fertig',          color:'#1a4b84' },
 ];
 
-const DEFAULTS = {
+function emptyData() { return { columns:{ todo:[], inprogress:[], done:[] }, tasks:[] }; }
+
+const SEED = {
   columns: {
     todo: [
-      { id:uid(), title:'Layout-Struktur finalisieren',
-        desc:'Vollständigen Architekturentwurf für das Dashboard erstellen.', priority:'high' },
-      { id:uid(), title:'Brand Assets prüfen',
-        desc:'Mit Marketing abstimmen, damit Typografie und Logos passen.', priority:'medium' },
+      { id:uid(), title:'Layout finalisieren',  desc:'Architekturentwurf für Dashboard erstellen.',      priority:'high',   dueDate:'' },
+      { id:uid(), title:'Brand Assets prüfen',  desc:'Typografie und Logos abstimmen.',                  priority:'medium', dueDate:'' },
     ],
     inprogress: [
-      { id:uid(), title:'Frontend API-Integration',
-        desc:'Kanban-Status mit Backend-Services über REST verbinden.', priority:'high' },
+      { id:uid(), title:'API-Integration',      desc:'Kanban mit Backend-Services über REST verbinden.', priority:'high',   dueDate:'' },
     ],
     done: [
-      { id:uid(), title:'System-Konfiguration',
-        desc:'Projekt-Repository und Tailwind CSS eingerichtet.', priority:'low' },
+      { id:uid(), title:'System-Konfiguration', desc:'Tailwind CSS und Repo eingerichtet.',              priority:'low',    dueDate:'' },
     ]
-  }
+  },
+  tasks: []
 };
 
-// ─── App state ───────────────────────────────────────────────────────────
-let activeBoard = 'personal';
-let data = { columns:{ todo:[], inprogress:[], done:[] } };
-let editId  = null;
-let editCol = null;
+// ── State ────────────────────────────────────────────────────────
+let board  = 'personal';
+let view   = 'board';
+let theme  = localStorage.getItem('kb_theme') || 'light';
+let notifs = localStorage.getItem('kb_notif') === 'true';
+let data   = emptyData();
 
-// Drag state
-let dragCol = null;
-let dragIdx = null;
-let placeholder = null;
+let ecId = null, ecCol = null;   // editing card
+let dCol = null, dPH  = null;    // board drag
+let ciTask = null, ciItem = null; // checklist drag
+let localWr = false, prevSD = null;
 
-// ─── localStorage ────────────────────────────────────────────────────────
-function loadLocal() {
-  const raw = localStorage.getItem('kanban_personal');
-  if (raw) { try { return JSON.parse(raw); } catch(e) {} }
-  const d = clone(DEFAULTS);
-  saveLocal(d);
-  return d;
+// Calendar state
+let calY = new Date().getFullYear(), calM = new Date().getMonth(), calSel = null;
+
+// ── Theme ────────────────────────────────────────────────────────
+function applyTheme() {
+  document.documentElement.setAttribute('data-theme', theme);
+  const icon = document.getElementById('theme-icon');
+  const btn  = document.getElementById('btn-theme');
+  if (icon) icon.textContent = theme === 'dark' ? 'dark_mode' : 'light_mode';
+  if (btn)  btn.classList.toggle('on', theme === 'dark');
 }
-function saveLocal(d) {
-  localStorage.setItem('kanban_personal', JSON.stringify(d));
+function toggleTheme() {
+  theme = theme === 'light' ? 'dark' : 'light';
+  localStorage.setItem('kb_theme', theme);
+  applyTheme();
+  toast(`Design: ${theme === 'dark' ? '🌙 Dunkel' : '☀️ Hell'}`, 'info');
 }
 
-// ─── Firestore ───────────────────────────────────────────────────────────
-function connectFirestore() {
-  if (!sharedDoc) {
-    showError('Firebase nicht initialisiert. Bitte Seite neu laden und Konsole (F12) prüfen.');
-    return;
-  }
-  setSyncDot('connecting');
-  hideError();
-  console.log('[Firestore] 🔄 Verbinde Echtzeit-Listener für boards/shared …');
-
-  unsubscribe = sharedDoc.onSnapshot(
-    snap => {
-      if (snap.exists) {
-        data = snap.data();
-        console.log('[Firestore] ✅ Daten empfangen –',
-          Object.values(data.columns).flat().length, 'Karte(n)');
-      } else {
-        console.log('[Firestore] 📄 Kein Dokument vorhanden – wird angelegt …');
-        data = { columns:{ todo:[], inprogress:[], done:[] } };
-        sharedDoc.set(data)
-          .then(() => console.log('[Firestore] ✅ Leeres Board angelegt.'))
-          .catch(e  => console.error('[Firestore] ❌ Anlegen fehlgeschlagen:', e.message));
-      }
-      setSyncDot('live');
-      hideError();
-      render();
-    },
-    err => {
-      console.error('[Firestore] ❌ Listener-Fehler:', err.code, '–', err.message);
-      setSyncDot('offline');
-      if (err.code === 'permission-denied') {
-        console.warn('[Firestore] 💡 Firestore-Regeln anpassen:\n' +
-          'Firebase Console → ates-kanban → Firestore → Regeln:\n' +
-          '  allow read, write: if true;');
-        showError('Zugriff verweigert (permission-denied). ' +
-          'Bitte Firestore-Sicherheitsregeln in der Firebase Console auf ' +
-          '"allow read, write: if true;" setzen.');
-      } else if (err.code === 'unavailable') {
-        showError('Firestore nicht erreichbar – Internetverbindung prüfen.');
-      } else {
-        showError(err.message);
-      }
+// ── Notifications ────────────────────────────────────────────────
+function applyNotifUI() {
+  const btn  = document.getElementById('btn-notif');
+  const icon = document.getElementById('notif-icon');
+  if (btn)  btn.classList.toggle('on', notifs);
+  if (icon) icon.textContent = notifs ? 'notifications_active' : 'notifications';
+}
+async function toggleNotifs() {
+  if (!notifs) {
+    if (Notification.permission === 'denied') { toast('🔕 Benachrichtigungen wurden im Browser blockiert.','warn'); return; }
+    if (Notification.permission !== 'granted') {
+      const p = await Notification.requestPermission();
+      if (p !== 'granted') { toast('🔕 Benachrichtigung abgelehnt.','warn'); return; }
     }
-  );
-}
-
-function disconnectFirestore() {
-  if (unsubscribe) {
-    unsubscribe();
-    unsubscribe = null;
-    console.log('[Firestore] 🔌 Listener getrennt.');
-  }
-  setSyncDot('offline');
-}
-
-async function persistShared() {
-  if (!sharedDoc) return;
-  try {
-    console.log('[Firestore] 💾 Speichere …');
-    await sharedDoc.set(data);
-    console.log('[Firestore] ✅ Gespeichert.');
-  } catch(e) {
-    console.error('[Firestore] ❌ Speichern fehlgeschlagen:', e.code, e.message);
-    if (e.code === 'permission-denied')
-      showError('Schreiben verweigert – Firestore-Regeln prüfen.');
-  }
-}
-
-// ─── Board switcher ──────────────────────────────────────────────────────
-function switchBoard(board) {
-  if (board === activeBoard) return;
-  activeBoard = board;
-
-  const pBtn = document.getElementById('btn-personal');
-  const sBtn = document.getElementById('btn-shared');
-  const title  = document.getElementById('board-title');
-  const status = document.getElementById('board-status');
-
-  if (board === 'personal') {
-    pBtn.classList.add('active');
-    sBtn.classList.remove('active');
-    title.textContent  = 'Mein Board';
-    status.textContent = 'Lokal gespeichert';
-    status.style.cssText = 'font-size:12px;font-weight:600;padding:5px 14px;border-radius:999px;background:#f1f5f9;color:#64748b;';
-    disconnectFirestore();
-    hideError();
-    data = loadLocal();
-    render();
-    console.log('[Kanban] ▶ Mein Board aktiv (localStorage)');
+    notifs = true;
+    toast('🔔 Benachrichtigungen für Geteiltes Board aktiviert.','success');
   } else {
-    sBtn.classList.add('active');
-    pBtn.classList.remove('active');
-    title.textContent  = 'Geteiltes Board';
-    status.textContent = '⏳ Verbinde …';
-    status.style.cssText = 'font-size:12px;font-weight:600;padding:5px 14px;border-radius:999px;background:#fef3c7;color:#92400e;';
-    connectFirestore();
-    console.log('[Kanban] ▶ Geteiltes Board aktiv (Firestore Echtzeit-Sync)');
+    notifs = false;
+    toast('🔕 Benachrichtigungen deaktiviert.','info');
+  }
+  localStorage.setItem('kb_notif', notifs);
+  applyNotifUI();
+}
+function notify(title, body) {
+  toast(`${title} – ${body}`, 'info');
+  if (notifs && Notification.permission === 'granted') {
+    try { new Notification(title, { body }); } catch(e) {}
   }
 }
-
-// ─── Sync dot ────────────────────────────────────────────────────────────
-function setSyncDot(state) {
-  const dot    = document.getElementById('sync-dot');
-  const status = document.getElementById('board-status');
-  dot.className = 'sync-dot ' + ({
-    live:'sync-live', offline:'sync-offline', connecting:'sync-connecting'
-  }[state] || 'sync-offline');
-
-  if (activeBoard !== 'shared') return;
-  if (state === 'live') {
-    dot.title = 'Echtzeit-Sync aktiv';
-    status.textContent = '🟢 Live-Sync aktiv';
-    status.style.cssText = 'font-size:12px;font-weight:600;padding:5px 14px;border-radius:999px;background:#dcfce7;color:#15803d;';
-  } else if (state === 'connecting') {
-    dot.title = 'Verbinde …';
-  } else {
-    dot.title = 'Offline';
-    status.textContent = '🔴 Offline';
-    status.style.cssText = 'font-size:12px;font-weight:600;padding:5px 14px;border-radius:999px;background:#fee2e2;color:#b91c1c;';
-  }
-}
-
-// ─── Error banner ────────────────────────────────────────────────────────
-function showError(msg) {
-  const b = document.getElementById('fb-error');
-  document.getElementById('fb-error-msg').textContent = msg;
-  b.style.display = 'block';
-}
-function hideError() {
-  document.getElementById('fb-error').style.display = 'none';
-}
-
-// ─── Render ──────────────────────────────────────────────────────────────
-function render() {
-  const board = document.getElementById('board');
-  board.innerHTML = '';
-  COLS.forEach(col => {
-    const cards = data.columns[col.id] || [];
-    board.appendChild(buildColumn(col, cards));
+function detectChanges(oldD, newD) {
+  if (!notifs) return;
+  const flat = d => Object.entries(d.columns).flatMap(([col,cs]) => cs.map(c => ({...c,col})));
+  const oa = flat(oldD), na = flat(newD);
+  na.forEach(c  => { if (!oa.find(o => o.id===c.id))            notify('Neue Karte',       c.title); });
+  oa.forEach(c  => { if (!na.find(n => n.id===c.id))            notify('Karte gelöscht',    c.title); });
+  na.forEach(c  => {
+    const o = oa.find(o => o.id===c.id);
+    if (o && o.col!==c.col) notify('Karte verschoben', `"${c.title}" → ${COLS.find(cl=>cl.id===c.col)?.label||c.col}`);
   });
 }
 
-function buildColumn(col, cards) {
-  const wrap = document.createElement('div');
-  wrap.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
+// ── Toast ────────────────────────────────────────────────────────
+const T_ICON = { success:'check_circle', warn:'warning', error:'cancel', info:'info' };
+const T_CLR  = { success:'#22c55e', warn:'#f59e0b', error:'#ef4444', info:'#3b82f6' };
+function toast(msg, type='info') {
+  const c = document.getElementById('toasts');
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.innerHTML = `
+    <span class="icon fill" style="color:${T_CLR[type]};font-size:18px;margin-top:1px;flex-shrink:0;">${T_ICON[type]||'info'}</span>
+    <span style="flex:1;">${esc(msg)}</span>
+    <button onclick="this.parentElement.remove()" style="background:none;border:none;cursor:pointer;color:var(--muted);padding:0;">
+      <span class="icon" style="font-size:15px;">close</span>
+    </button>`;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 5000);
+}
 
-  // Header
+// ── localStorage ─────────────────────────────────────────────────
+function loadLocal() {
+  const raw = localStorage.getItem('kb_personal');
+  if (raw) { try { const d=JSON.parse(raw); if(!d.tasks) d.tasks=[]; return d; } catch(e){} }
+  const d = clone(SEED); saveLocal(d); return d;
+}
+function saveLocal(d) { localStorage.setItem('kb_personal', JSON.stringify(d)); }
+
+// ── Firestore ────────────────────────────────────────────────────
+function connectFS() {
+  if (!sdoc) { showErr('Firebase nicht initialisiert. Seite neu laden.'); return; }
+  setDot('connecting'); hideErr();
+  console.log('[Firestore] 🔄 Verbinde Listener für boards/shared …');
+
+  unsub = sdoc.onSnapshot(snap => {
+    let inc;
+    if (snap.exists) {
+      inc = snap.data();
+      if (!inc.tasks) inc.tasks = [];
+      console.log('[Firestore] ✅ Daten empfangen –', Object.values(inc.columns).flat().length, 'Karte(n)');
+    } else {
+      console.log('[Firestore] 📄 Kein Dokument – lege Board an …');
+      inc = emptyData();
+      sdoc.set(inc)
+        .then(() => console.log('[Firestore] ✅ Leeres Board angelegt.'))
+        .catch(e  => console.error('[Firestore] ❌ Anlegen fehlgeschlagen:', e.message));
+    }
+    if (localWr) { localWr = false; }
+    else         { if (prevSD) detectChanges(prevSD, inc); }
+    prevSD = clone(inc);
+    data   = inc;
+    setDot('live');
+    hideErr();
+    setStatus('🟢 Live-Sync aktiv', '#dcfce7', '#15803d');
+    render();
+  }, err => {
+    console.error('[Firestore] ❌ Fehler:', err.code, err.message);
+    setDot('offline');
+    if (err.code === 'permission-denied') {
+      console.warn('[Firestore] 💡 Regeln setzen: allow read, write: if true;');
+      showErr('permission-denied – Firestore-Regeln in Firebase Console auf "allow read, write: if true;" setzen.');
+    } else { showErr(err.message); }
+  });
+}
+function disconnectFS() {
+  if (unsub) { unsub(); unsub=null; console.log('[Firestore] 🔌 Listener getrennt.'); }
+  prevSD = null; setDot('offline');
+}
+async function persistShared() {
+  if (!sdoc) return;
+  try {
+    localWr = true;
+    console.log('[Firestore] 💾 Speichere …');
+    await sdoc.set(data);
+    console.log('[Firestore] ✅ Gespeichert.');
+  } catch(e) {
+    localWr = false;
+    console.error('[Firestore] ❌ Fehler:', e.code, e.message);
+    if (e.code === 'permission-denied') showErr('Schreiben verweigert – Firestore-Regeln prüfen.');
+  }
+}
+function persist() { board==='personal' ? saveLocal(data) : persistShared(); }
+
+// ── UI helpers ───────────────────────────────────────────────────
+function setDot(s) {
+  const d = document.getElementById('sync-dot');
+  if (d) d.className = `dot ${{live:'dot-live',connecting:'dot-con',offline:'dot-off'}[s]||'dot-off'}`;
+}
+function showErr(m) { document.getElementById('fb-err-msg').textContent=m; document.getElementById('fb-err').style.display='block'; }
+function hideErr()  { document.getElementById('fb-err').style.display='none'; }
+function setStatus(txt, bg, col) {
+  const el = document.getElementById('board-status');
+  if (el) { el.textContent=txt; el.style.cssText=`font-size:12px;font-weight:600;padding:5px 14px;border-radius:999px;background:${bg};color:${col};`; }
+}
+
+// ── Board switcher ────────────────────────────────────────────────
+function switchBoard(b) {
+  if (b === board) return;
+  board = b;
+  document.getElementById('btn-p').classList.toggle('active', b==='personal');
+  document.getElementById('btn-s').classList.toggle('active', b==='shared');
+  document.getElementById('board-title').textContent = b==='personal' ? 'Mein Board' : 'Geteiltes Board';
+  if (b === 'personal') {
+    setStatus('Lokal gespeichert','var(--bg)','var(--muted)');
+    disconnectFS(); hideErr(); data=loadLocal(); render();
+    console.log('[Kanban] ▶ Mein Board (localStorage)');
+  } else {
+    setStatus('⏳ Verbinde …','#fef3c7','#92400e');
+    connectFS();
+    console.log('[Kanban] ▶ Geteiltes Board (Firestore)');
+  }
+}
+
+// ── View switcher ─────────────────────────────────────────────────
+function switchView(v) {
+  view = v;
+  ['board','tasks','calendar'].forEach(n => {
+    const el = document.getElementById(`ni-${n}`);
+    if (el) el.classList.toggle('active', n===v);
+  });
+  document.getElementById('v-board').style.display    = v==='board'    ? 'grid'  : 'none';
+  document.getElementById('v-calendar').style.display = v==='calendar' ? 'block' : 'none';
+  document.getElementById('v-tasks').style.display    = v==='tasks'    ? 'block' : 'none';
+  const addBtn = document.getElementById('add-card-btn');
+  const sub    = document.getElementById('page-sub');
+  if (v==='board')    { sub.textContent='Produktivitäts-Board';  addBtn.style.display='flex'; }
+  if (v==='calendar') { sub.textContent='Kalender-Ansicht';      addBtn.style.display='none'; renderCalendar(); }
+  if (v==='tasks')    { sub.textContent='Aufgaben & Checklisten'; addBtn.style.display='none'; renderTasks(); }
+}
+
+function render() {
+  if (view==='board')    renderBoard();
+  if (view==='calendar') renderCalendar();
+  if (view==='tasks')    renderTasks();
+}
+
+// ════════════════════════════════════════════════════════════════
+//  BOARD VIEW
+// ════════════════════════════════════════════════════════════════
+function renderBoard() {
+  const el = document.getElementById('v-board');
+  if (!el) return;
+  el.innerHTML = '';
+  COLS.forEach(col => el.appendChild(buildCol(col)));
+}
+
+function buildCol(col) {
+  const cards = data.columns[col.id] || [];
+  const wrap  = document.createElement('div');
+  wrap.style.cssText = 'display:flex;flex-direction:column;gap:9px;';
+
   const hdr = document.createElement('div');
-  hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0 4px 8px;';
+  hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0 3px 7px;';
   hdr.innerHTML = `
     <div style="display:flex;align-items:center;gap:8px;">
-      <h2 style="font-family:'Manrope',sans-serif;font-weight:800;font-size:17px;color:${col.headColor};">
-        ${col.label}
-      </h2>
-      <span style="padding:2px 9px;background:#e8edf5;border-radius:999px;font-size:12px;font-weight:700;color:#64748b;">
-        ${cards.length}
-      </span>
+      <h2 style="font-family:'Manrope',sans-serif;font-weight:800;font-size:15px;color:${col.color};">${col.label}</h2>
+      <span style="padding:1px 8px;background:var(--bg);border-radius:999px;font-size:11px;font-weight:700;color:var(--muted);">${cards.length}</span>
     </div>
-    <button onclick="openModal('${col.id}')"
-      style="padding:4px;border-radius:50%;cursor:pointer;color:#94a3b8;background:transparent;transition:background .15s;"
-      onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
-      <span class="icon" style="font-size:20px;">add</span>
-    </button>`;
+    <button onclick="openCardModal('${col.id}')" class="ibtn"><span class="icon" style="font-size:18px;">add</span></button>`;
   wrap.appendChild(hdr);
 
-  // Drop zone
   const zone = document.createElement('div');
-  zone.className = 'drop-col';
+  zone.className   = 'drop-col';
   zone.dataset.col = col.id;
-  zone.style.cssText = 'display:flex;flex-direction:column;gap:10px;padding:4px 0;';
-  zone.addEventListener('dragover',  onDragOver);
-  zone.addEventListener('dragleave', onDragLeave);
-  zone.addEventListener('drop',      onDrop);
+  zone.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
+  zone.addEventListener('dragover',  bDragOver);
+  zone.addEventListener('dragleave', bDragLeave);
+  zone.addEventListener('drop',      bDrop);
   cards.forEach((c,i) => zone.appendChild(buildCard(c, col.id, i)));
   wrap.appendChild(zone);
 
-  // Add-card button
-  const addBtn = document.createElement('button');
-  addBtn.style.cssText = 'width:100%;padding:14px;border:2px dashed #cbd5e1;border-radius:12px;font-size:13px;font-weight:600;color:#94a3b8;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s;';
-  addBtn.innerHTML = `<span class="icon" style="font-size:18px;">add_circle</span> Neue Karte`;
-  addBtn.onmouseover = () => { addBtn.style.borderColor='#93c5fd'; addBtn.style.color='#3b82f6'; addBtn.style.background='rgba(59,130,246,.04)'; };
-  addBtn.onmouseout  = () => { addBtn.style.borderColor='#cbd5e1'; addBtn.style.color='#94a3b8'; addBtn.style.background='transparent'; };
-  addBtn.onclick = () => openModal(col.id);
-  wrap.appendChild(addBtn);
-
+  const btn = document.createElement('button');
+  btn.style.cssText = 'width:100%;padding:12px;border:2px dashed var(--border);border-radius:10px;font-size:12px;font-weight:600;color:var(--muted);background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;transition:all .15s;';
+  btn.innerHTML = `<span class="icon" style="font-size:16px;">add_circle</span> Neue Karte`;
+  btn.onmouseover = () => { btn.style.borderColor='var(--accent)'; btn.style.color='var(--accent)'; btn.style.background='rgba(0,52,102,.04)'; };
+  btn.onmouseout  = () => { btn.style.borderColor='var(--border)'; btn.style.color='var(--muted)';  btn.style.background='transparent'; };
+  btn.onclick = () => openCardModal(col.id);
+  wrap.appendChild(btn);
   return wrap;
 }
 
 function buildCard(card, colId, idx) {
-  const isDone = colId === 'done';
-  const prMap = { high:{cls:'pr-high',label:'Hoch'}, medium:{cls:'pr-medium',label:'Mittel'}, low:{cls:'pr-low',label:'Niedrig'} };
-  const pr = prMap[card.priority] || prMap.medium;
-
+  const done = colId === 'done';
+  const PR   = { high:{c:'pr-h',l:'Hoch'}, medium:{c:'pr-m',l:'Mittel'}, low:{c:'pr-l',l:'Niedrig'} };
+  const pr   = PR[card.priority] || PR.medium;
+  const due  = card.dueDate
+    ? new Date(card.dueDate+'T00:00:00').toLocaleDateString('de-CH',{day:'2-digit',month:'2-digit',year:'2-digit'})
+    : '';
   const el = document.createElement('div');
-  el.className = 'card';
-  el.draggable = true;
+  el.className   = 'kcard';
+  el.draggable   = true;
   el.dataset.id  = card.id;
   el.dataset.col = colId;
   el.dataset.idx = idx;
-  el.style.cssText = `background:#fff;border-radius:12px;padding:16px 18px;
-    box-shadow:0 2px 12px rgba(0,0,0,.07);border:1px solid #f1f5f9;
-    opacity:${isDone ? '.65' : '1'};`;
-
+  if (done) el.style.opacity = '.62';
   el.innerHTML = `
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;">
-      <span class="${pr.cls}" style="padding:3px 10px;border-radius:999px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;">
-        ${pr.label}
-      </span>
-      <div style="display:flex;align-items:center;gap:2px;" class="card-actions" style="opacity:0;">
-        ${isDone ? '<span class="icon" style="color:#22c55e;font-size:20px;" title="Fertig">check_circle</span>' : ''}
-        <button onclick="event.stopPropagation();editCard('${colId}','${card.id}')"
-          style="padding:3px;border-radius:6px;background:transparent;cursor:pointer;color:#94a3b8;transition:all .12s;"
-          onmouseover="this.style.background='#f1f5f9';this.style.color='#003466'"
-          onmouseout="this.style.background='transparent';this.style.color='#94a3b8'">
-          <span class="icon" style="font-size:16px;">edit</span>
-        </button>
-        <button onclick="event.stopPropagation();deleteCard('${colId}','${card.id}')"
-          style="padding:3px;border-radius:6px;background:transparent;cursor:pointer;color:#94a3b8;transition:all .12s;"
-          onmouseover="this.style.background='#fff0f0';this.style.color='#ef4444'"
-          onmouseout="this.style.background='transparent';this.style.color='#94a3b8'">
-          <span class="icon" style="font-size:16px;">delete</span>
-        </button>
-        <span class="icon" style="font-size:18px;color:#cbd5e1;cursor:grab;">drag_indicator</span>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;">
+      <span class="${pr.c}" style="padding:2px 9px;border-radius:999px;font-size:10px;font-weight:700;text-transform:uppercase;">${pr.l}</span>
+      <div style="display:flex;align-items:center;gap:1px;">
+        ${done?'<span class="icon fill" style="color:#22c55e;font-size:17px;margin-right:2px;">check_circle</span>':''}
+        <button onclick="event.stopPropagation();editCard('${colId}','${card.id}')" class="ibtn" style="padding:4px;" title="Bearbeiten">
+          <span class="icon" style="font-size:14px;">edit</span></button>
+        <button onclick="event.stopPropagation();delCard('${colId}','${card.id}')" class="ibtn" style="padding:4px;" title="Löschen"
+          onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='var(--muted)'">
+          <span class="icon" style="font-size:14px;">delete</span></button>
+        <span class="icon" style="font-size:16px;color:var(--border);cursor:grab;">drag_indicator</span>
       </div>
     </div>
-    <h3 style="font-family:'Manrope',sans-serif;font-weight:700;font-size:14px;color:${isDone?'#94a3b8':'#1e293b'};
-               ${isDone?'text-decoration:line-through;':''}margin-bottom:${card.desc?'6px':'0'};">
-      ${esc(card.title)}
-    </h3>
-    ${card.desc ? `<p style="font-size:12.5px;color:#64748b;line-height:1.55;">${esc(card.desc)}</p>` : ''}
-  `;
-
-  el.addEventListener('dragstart', onDragStart);
-  el.addEventListener('dragend',   onDragEnd);
+    <h3 style="font-family:'Manrope',sans-serif;font-weight:700;font-size:13px;
+               color:${done?'var(--muted)':'var(--text)'};
+               ${done?'text-decoration:line-through;':''}
+               margin-bottom:${card.desc?'5px':'0'};">${esc(card.title)}</h3>
+    ${card.desc?`<p style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:4px;">${esc(card.desc)}</p>`:''}
+    ${due?`<div style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--muted);background:var(--bg);padding:2px 8px;border-radius:6px;margin-top:2px;">
+      <span class="icon" style="font-size:13px;">event</span>${due}</div>`:''}`;
+  el.addEventListener('dragstart', bDragStart);
+  el.addEventListener('dragend',   bDragEnd);
   return el;
 }
 
-// ─── Drag & Drop ─────────────────────────────────────────────────────────
-function onDragStart(e) {
-  dragCol = e.currentTarget.dataset.col;
-  dragIdx = +e.currentTarget.dataset.idx;
+// Board D&D
+function bDragStart(e) {
+  dCol = e.currentTarget.dataset.col;
   e.dataTransfer.effectAllowed = 'move';
   e.dataTransfer.setData('text/plain', e.currentTarget.dataset.id);
   setTimeout(() => e.currentTarget.classList.add('dragging'), 0);
 }
-function onDragEnd(e) {
+function bDragEnd(e) {
   e.currentTarget.classList.remove('dragging');
-  removePlaceholder();
-  document.querySelectorAll('.drop-col').forEach(z => z.classList.remove('drag-over'));
+  rmPH();
+  document.querySelectorAll('.drop-col').forEach(z => z.classList.remove('dov'));
 }
-function onDragOver(e) {
+function bDragOver(e) {
   e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-  const zone = e.currentTarget;
-  zone.classList.add('drag-over');
-  removePlaceholder();
-  placeholder = document.createElement('div');
-  placeholder.className = 'drop-placeholder';
-  const after = afterElement(zone, e.clientY);
-  after ? zone.insertBefore(placeholder, after) : zone.appendChild(placeholder);
+  e.currentTarget.classList.add('dov');
+  rmPH();
+  dPH = document.createElement('div'); dPH.className='dph';
+  const after = afterCard(e.currentTarget, e.clientY);
+  after ? e.currentTarget.insertBefore(dPH, after) : e.currentTarget.appendChild(dPH);
 }
-function onDragLeave(e) {
-  if (!e.currentTarget.contains(e.relatedTarget)) {
-    e.currentTarget.classList.remove('drag-over');
-    removePlaceholder();
-  }
+function bDragLeave(e) {
+  if (!e.currentTarget.contains(e.relatedTarget)) { e.currentTarget.classList.remove('dov'); rmPH(); }
 }
-function onDrop(e) {
+function bDrop(e) {
   e.preventDefault();
-  const zone   = e.currentTarget;
-  const cardId = e.dataTransfer.getData('text/plain');
-  const dest   = zone.dataset.col;
-  zone.classList.remove('drag-over');
-
-  const src = data.columns[dragCol];
-  const ci  = src.findIndex(c => c.id === cardId);
-  if (ci === -1) { removePlaceholder(); return; }
-  const [card] = src.splice(ci, 1);
-
-  // Determine insert index from placeholder position
-  const kids  = [...zone.children].filter(el => el !== placeholder);
-  const phPos = placeholder ? [...zone.children].indexOf(placeholder) : Infinity;
-  const destCards = data.columns[dest];
-  const insertAt  = Math.min(phPos, destCards.length);
-  destCards.splice(insertAt, 0, card);
-
-  removePlaceholder();
-  persist();
-  render();
+  const zone=e.currentTarget, cid=e.dataTransfer.getData('text/plain'), dest=zone.dataset.col;
+  zone.classList.remove('dov');
+  const src=data.columns[dCol], ci=src.findIndex(c=>c.id===cid);
+  if (ci===-1) { rmPH(); return; }
+  const [card]=src.splice(ci,1);
+  const phPos=dPH?[...zone.children].indexOf(dPH):Infinity;
+  data.columns[dest].splice(Math.min(phPos, data.columns[dest].length), 0, card);
+  rmPH(); persist(); renderBoard();
 }
-function afterElement(zone, y) {
-  return [...zone.querySelectorAll('.card:not(.dragging)')].reduce((best, el) => {
-    const { top, height } = el.getBoundingClientRect();
-    const off = y - top - height / 2;
-    return off < 0 && off > best.off ? { off, el } : best;
-  }, { off: -Infinity, el: null }).el;
+function afterCard(zone, y) {
+  return [...zone.querySelectorAll('.kcard:not(.dragging)')].reduce((b,el) => {
+    const {top,height}=el.getBoundingClientRect(), off=y-top-height/2;
+    return off<0&&off>b.off ? {off,el} : b;
+  },{off:-Infinity,el:null}).el;
 }
-function removePlaceholder() {
-  if (placeholder?.parentNode) placeholder.parentNode.removeChild(placeholder);
-  placeholder = null;
-}
+function rmPH() { if (dPH?.parentNode) dPH.parentNode.removeChild(dPH); dPH=null; }
 
-// ─── CRUD ────────────────────────────────────────────────────────────────
-function persist() {
-  if (activeBoard === 'personal') saveLocal(data);
-  else persistShared();
+// Card CRUD
+function delCard(colId, cid) { data.columns[colId]=data.columns[colId].filter(c=>c.id!==cid); persist(); renderBoard(); }
+function editCard(colId, cid) {
+  const c=data.columns[colId]?.find(c=>c.id===cid); if(!c) return;
+  ecId=cid; ecCol=colId;
+  document.getElementById('card-modal-title').textContent='Karte bearbeiten';
+  document.getElementById('c-title').value=c.title;
+  document.getElementById('c-desc').value=c.desc||'';
+  document.getElementById('c-prio').value=c.priority||'medium';
+  document.getElementById('c-col').value=colId;
+  document.getElementById('c-due').value=c.dueDate||'';
+  document.getElementById('card-modal').style.display='flex';
+  setTimeout(()=>document.getElementById('c-title').focus(),40);
 }
-
-function deleteCard(colId, cardId) {
-  data.columns[colId] = data.columns[colId].filter(c => c.id !== cardId);
-  persist();
-  render();
+function openCardModal(colId) {
+  ecId=ecCol=null;
+  document.getElementById('card-modal-title').textContent='Neue Karte';
+  document.getElementById('c-title').value='';
+  document.getElementById('c-desc').value='';
+  document.getElementById('c-prio').value='medium';
+  document.getElementById('c-col').value=colId||'todo';
+  document.getElementById('c-due').value='';
+  document.getElementById('card-modal').style.display='flex';
+  setTimeout(()=>document.getElementById('c-title').focus(),40);
 }
-
-function editCard(colId, cardId) {
-  const card = data.columns[colId]?.find(c => c.id === cardId);
-  if (!card) return;
-  editId  = cardId;
-  editCol = colId;
-  document.getElementById('modal-title').textContent = 'Karte bearbeiten';
-  document.getElementById('inp-title').value    = card.title;
-  document.getElementById('inp-desc').value     = card.desc || '';
-  document.getElementById('inp-priority').value = card.priority || 'medium';
-  document.getElementById('inp-column').value   = colId;
-  document.getElementById('modal').style.display = 'flex';
-  setTimeout(() => document.getElementById('inp-title').focus(), 40);
-}
-
-// ─── Modal ───────────────────────────────────────────────────────────────
-function openModal(colId) {
-  editId  = null;
-  editCol = null;
-  document.getElementById('modal-title').textContent = 'Neue Karte';
-  document.getElementById('inp-title').value    = '';
-  document.getElementById('inp-desc').value     = '';
-  document.getElementById('inp-priority').value = 'medium';
-  document.getElementById('inp-column').value   = colId || 'todo';
-  document.getElementById('modal').style.display = 'flex';
-  setTimeout(() => document.getElementById('inp-title').focus(), 40);
-}
-
-function closeModal() {
-  document.getElementById('modal').style.display = 'none';
-  editId = editCol = null;
-}
-
+function closeCardModal() { document.getElementById('card-modal').style.display='none'; ecId=ecCol=null; }
 function saveCard() {
-  const titleEl = document.getElementById('inp-title');
-  const title = titleEl.value.trim();
-  if (!title) { titleEl.style.borderColor = '#ef4444'; titleEl.focus(); return; }
-  titleEl.style.borderColor = '';
-
-  const desc     = document.getElementById('inp-desc').value.trim();
-  const priority = document.getElementById('inp-priority').value;
-  const colId    = document.getElementById('inp-column').value;
-
-  if (editId) {
-    // Move column if changed
-    const old = data.columns[editCol];
-    const i   = old.findIndex(c => c.id === editId);
-    if (i !== -1) {
-      const card = old[i];
-      card.title = title; card.desc = desc; card.priority = priority;
-      if (colId !== editCol) {
-        old.splice(i, 1);
-        data.columns[colId].push(card);
-      }
-    }
-  } else {
-    data.columns[colId].push({ id:uid(), title, desc, priority });
-  }
-
-  closeModal();
-  persist();
-  render();
+  const tEl=document.getElementById('c-title'), title=tEl.value.trim();
+  if (!title) { tEl.style.borderColor='#ef4444'; tEl.focus(); return; }
+  tEl.style.borderColor='';
+  const desc=document.getElementById('c-desc').value.trim();
+  const prio=document.getElementById('c-prio').value;
+  const col=document.getElementById('c-col').value;
+  const due=document.getElementById('c-due').value;
+  if (ecId) {
+    const arr=data.columns[ecCol], i=arr.findIndex(c=>c.id===ecId);
+    if (i!==-1) { Object.assign(arr[i],{title,desc,priority:prio,dueDate:due}); if(col!==ecCol){const[card]=arr.splice(i,1);data.columns[col].push(card);} }
+  } else { data.columns[col].push({id:uid(),title,desc,priority:prio,dueDate:due}); }
+  closeCardModal(); persist(); render();
 }
 
-// ─── Boot ────────────────────────────────────────────────────────────────
-console.log('[Kanban] 🚀 App startet …');
+// ════════════════════════════════════════════════════════════════
+//  CALENDAR VIEW
+// ════════════════════════════════════════════════════════════════
+const MONTHS=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+
+function calNav(d) {
+  calM+=d; if(calM>11){calM=0;calY++;} if(calM<0){calM=11;calY--;} calSel=null; renderCalendar();
+}
+function calGotoToday() { const n=new Date(); calY=n.getFullYear(); calM=n.getMonth(); calSel=null; renderCalendar(); }
+
+function dueMap() {
+  const m={};
+  Object.entries(data.columns).forEach(([colId,cards])=>cards.forEach(c=>{
+    if(c.dueDate){if(!m[c.dueDate])m[c.dueDate]=[];m[c.dueDate].push({...c,colId});}
+  }));
+  return m;
+}
+const CHIP_BG ={todo:'#dbeafe',inprogress:'#fef3c7',done:'#dcfce7'};
+const CHIP_CO ={todo:'#1d4ed8',inprogress:'#92400e',done:'#15803d'};
+
+function renderCalendar() {
+  const lbl=document.getElementById('cal-lbl'), grid=document.getElementById('cal-grid');
+  if (!lbl||!grid) return;
+  lbl.textContent=`${MONTHS[calM]} ${calY}`;
+  const today=new Date(), dm=dueMap();
+  grid.innerHTML='';
+  ['Mo','Di','Mi','Do','Fr','Sa','So'].forEach(d=>{
+    const h=document.createElement('div'); h.className='cal-dh'; h.textContent=d; grid.appendChild(h);
+  });
+  const first=(new Date(calY,calM,1).getDay()+6)%7;
+  const last=new Date(calY,calM+1,0).getDate();
+  const prevL=new Date(calY,calM,0).getDate();
+  for(let i=0;i<first;i++)   grid.appendChild(makeDay(prevL-first+1+i,calM-1,calY,true,today,dm));
+  for(let d=1;d<=last;d++)   grid.appendChild(makeDay(d,calM,calY,false,today,dm));
+  const trail=(first+last)%7===0?0:7-(first+last)%7;
+  for(let i=1;i<=trail;i++)  grid.appendChild(makeDay(i,calM+1,calY,true,today,dm));
+  if (calSel) showCalDetail(calSel,dm);
+  else { const det=document.getElementById('cal-detail'); if(det) det.style.display='none'; }
+}
+
+function makeDay(day,month,year,other,today,dm) {
+  const d=new Date(year,month,day);
+  const aY=d.getFullYear(),aM=d.getMonth(),aD=d.getDate();
+  const ds=`${aY}-${String(aM+1).padStart(2,'0')}-${String(aD).padStart(2,'0')}`;
+  const cell=document.createElement('div'); cell.className='cal-d';
+  if(other) cell.classList.add('other');
+  if(aY===today.getFullYear()&&aM===today.getMonth()&&aD===today.getDate()) cell.classList.add('today');
+  if(calSel===ds) cell.classList.add('sel');
+  const num=document.createElement('div'); num.className='cal-num'; num.textContent=aD; cell.appendChild(num);
+  (dm[ds]||[]).slice(0,3).forEach(c=>{
+    const chip=document.createElement('div'); chip.className='cal-chip';
+    chip.style.cssText=`background:${CHIP_BG[c.colId]||'#e0e7ff'};color:${CHIP_CO[c.colId]||'#3730a3'};`;
+    chip.textContent=c.title; cell.appendChild(chip);
+  });
+  if((dm[ds]||[]).length>3){const m=document.createElement('div');m.style.cssText='font-size:10px;color:var(--muted);margin-top:2px;';m.textContent=`+${(dm[ds]||[]).length-3} mehr`;cell.appendChild(m);}
+  cell.onclick=()=>{calSel=calSel===ds?null:ds;renderCalendar();};
+  return cell;
+}
+
+function showCalDetail(ds,dm) {
+  const det=document.getElementById('cal-detail');
+  const dtitle=document.getElementById('cal-dtitle');
+  const dcards=document.getElementById('cal-dcards');
+  if (!det) return;
+  dtitle.textContent=new Date(ds+'T00:00:00').toLocaleDateString('de-CH',{weekday:'long',day:'numeric',month:'long'});
+  dcards.innerHTML='';
+  const cards=dm[ds]||[];
+  if (!cards.length) {
+    dcards.innerHTML='<div style="font-size:13px;color:var(--muted);text-align:center;padding:16px 0;">Keine Aufgaben.</div>';
+  } else {
+    const PR={high:{c:'pr-h',l:'Hoch'},medium:{c:'pr-m',l:'Mittel'},low:{c:'pr-l',l:'Niedrig'}};
+    cards.forEach(c=>{
+      const pr=PR[c.priority]||PR.medium;
+      const colLabel=COLS.find(cl=>cl.id===c.colId)?.label||c.colId;
+      const item=document.createElement('div');
+      item.style.cssText='padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:9px;margin-bottom:7px;';
+      item.innerHTML=`
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <span class="${pr.c}" style="padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;">${pr.l}</span>
+          <span style="font-size:11px;color:var(--muted);">${colLabel}</span>
+        </div>
+        <div style="font-size:13px;font-weight:600;color:var(--text);">${esc(c.title)}</div>
+        ${c.desc?`<div style="font-size:11px;color:var(--muted);margin-top:3px;">${esc(c.desc)}</div>`:''}`;
+      dcards.appendChild(item);
+    });
+  }
+  det.style.display='block';
+}
+
+// ════════════════════════════════════════════════════════════════
+//  TASKS / CHECKLIST VIEW
+// ════════════════════════════════════════════════════════════════
+function renderTasks() {
+  const wrap=document.getElementById('cl-wrap'); if(!wrap) return;
+  wrap.innerHTML='';
+  const tasks=data.tasks||[];
+  if (!tasks.length) {
+    wrap.innerHTML=`<div style="text-align:center;padding:48px 24px;background:var(--surface);border:1px solid var(--border);border-radius:14px;">
+      <span class="icon" style="font-size:48px;color:var(--border);">checklist</span>
+      <p style="margin-top:12px;font-size:14px;color:var(--muted);font-weight:500;">Noch keine Checklisten. Erstelle deine erste!</p></div>`;
+    return;
+  }
+  tasks.forEach(t=>wrap.appendChild(buildCl(t)));
+}
+
+function buildCl(task) {
+  const done=(task.items||[]).filter(i=>i.done).length;
+  const total=(task.items||[]).length;
+  const pct=total?Math.round(done/total*100):0;
+  const wrap=document.createElement('div');
+  wrap.style.cssText='background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:12px;';
+  wrap.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div style="flex:1;">
+        <h3 style="font-family:'Manrope',sans-serif;font-weight:800;font-size:14px;color:var(--text);margin-bottom:5px;">${esc(task.title)}</h3>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden;">
+            <div style="height:100%;width:${pct}%;background:var(--accent);border-radius:2px;transition:width .3s;"></div>
+          </div>
+          <span style="font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap;">${done}/${total}</span>
+        </div>
+      </div>
+      <button onclick="delCl('${task.id}')" class="ibtn" style="margin-left:12px;"
+        onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='var(--muted)'">
+        <span class="icon" style="font-size:18px;">delete</span></button>
+    </div>
+    <div id="cl-items-${task.id}" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
+    <div style="display:flex;gap:8px;">
+      <input id="cl-new-${task.id}" class="fi" type="text" placeholder="Neues Element…" style="flex:1;"
+        onkeydown="if(event.key==='Enter')addItem('${task.id}')"/>
+      <button onclick="addItem('${task.id}')"
+        style="padding:8px 14px;border-radius:9px;background:var(--accent);color:#fff;font-weight:700;font-size:13px;cursor:pointer;border:none;">
+        <span class="icon" style="font-size:15px;">add</span></button>
+    </div>`;
+  const ic=wrap.querySelector(`#cl-items-${task.id}`);
+  (task.items||[]).forEach((item,idx)=>ic.appendChild(buildItem(task.id,item,idx)));
+  return wrap;
+}
+
+function buildItem(taskId, item, idx) {
+  const el=document.createElement('div');
+  el.className=`cl-item${item.done?' done-item':''}`;
+  el.draggable=true;
+  el.dataset.taskId=taskId; el.dataset.itemId=item.id; el.dataset.idx=idx;
+  el.innerHTML=`
+    <span class="icon" style="font-size:17px;color:var(--border);cursor:grab;flex-shrink:0;">drag_indicator</span>
+    <input type="checkbox" ${item.done?'checked':''} onchange="toggleItem('${taskId}','${item.id}')"
+      style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent);flex-shrink:0;"/>
+    <span class="cl-text" style="flex:1;font-size:13px;font-weight:500;color:var(--text);">${esc(item.text)}</span>
+    <button onclick="delItem('${taskId}','${item.id}')" class="ibtn" style="padding:3px;"
+      onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='var(--muted)'">
+      <span class="icon" style="font-size:14px;">close</span></button>`;
+  el.addEventListener('dragstart', iDragStart);
+  el.addEventListener('dragend',   iDragEnd);
+  el.addEventListener('dragover',  iDragOver);
+  el.addEventListener('drop',      iDrop);
+  return el;
+}
+
+// Checklist D&D
+function iDragStart(e) {
+  ciTask=e.currentTarget.dataset.taskId; ciItem=e.currentTarget.dataset.itemId;
+  e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',ciItem);
+  setTimeout(()=>e.currentTarget.classList.add('dragging'),0);
+}
+function iDragEnd(e)  { e.currentTarget.classList.remove('dragging'); }
+function iDragOver(e) { if(e.currentTarget.dataset.taskId===ciTask){e.preventDefault();} }
+function iDrop(e) {
+  e.preventDefault();
+  const toId=e.currentTarget.dataset.itemId; if(toId===ciItem) return;
+  const task=(data.tasks||[]).find(t=>t.id===ciTask); if(!task) return;
+  const fi=task.items.findIndex(i=>i.id===ciItem), ti=task.items.findIndex(i=>i.id===toId);
+  if(fi===-1||ti===-1) return;
+  const [item]=task.items.splice(fi,1); task.items.splice(ti,0,item);
+  persist(); renderTasks();
+}
+
+// Checklist CRUD
+function addItem(taskId) {
+  const inp=document.getElementById(`cl-new-${taskId}`), text=inp?.value.trim(); if(!text) return;
+  const task=(data.tasks||[]).find(t=>t.id===taskId); if(!task) return;
+  task.items.push({id:uid(),text,done:false}); inp.value=''; persist(); renderTasks();
+}
+function toggleItem(taskId,itemId) {
+  const item=(data.tasks||[]).find(t=>t.id===taskId)?.items?.find(i=>i.id===itemId);
+  if(item){item.done=!item.done;persist();renderTasks();}
+}
+function delItem(taskId,itemId) {
+  const task=(data.tasks||[]).find(t=>t.id===taskId);
+  if(task){task.items=task.items.filter(i=>i.id!==itemId);persist();renderTasks();}
+}
+function delCl(taskId) { data.tasks=(data.tasks||[]).filter(t=>t.id!==taskId); persist(); renderTasks(); }
+
+// Checklist modal
+function openClModal()  { document.getElementById('cl-title').value=''; document.getElementById('cl-modal').style.display='flex'; setTimeout(()=>document.getElementById('cl-title').focus(),40); }
+function closeClModal() { document.getElementById('cl-modal').style.display='none'; }
+function saveCl() {
+  const title=document.getElementById('cl-title').value.trim();
+  if (!title){document.getElementById('cl-title').style.borderColor='#ef4444';return;}
+  document.getElementById('cl-title').style.borderColor='';
+  if (!data.tasks) data.tasks=[];
+  data.tasks.push({id:uid(),title,items:[]});
+  closeClModal(); persist(); renderTasks();
+}
+
+// ════════════════════════════════════════════════════════════════
+//  BOOT
+// ════════════════════════════════════════════════════════════════
+console.log('[Ates-Board] 🚀 Startet …');
+applyTheme();
+applyNotifUI();
 data = loadLocal();
-render();
-console.log('[Kanban] ✅ "Mein Board" geladen –',
-  Object.values(data.columns).flat().length, 'Karte(n) aus localStorage.');
-console.log('[Kanban] 💡 Klick auf "Geteiltes Board" → Firestore-Sync startet.');
+renderBoard();
+console.log('[Ates-Board] ✅ Mein Board geladen –', Object.values(data.columns).flat().length, 'Karte(n) aus localStorage.');
+console.log('[Ates-Board] 💡 "Geteiltes Board" → Firestore-Sync | "Aufgaben" / "Kalender" → neue Ansichten.');
 </script>
 </body>
 </html>
