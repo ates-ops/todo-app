@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Executive Flow | Kanban</title>
+
+<!-- ① Tailwind config MUST come before the CDN script -->
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: { headline: ['Manrope','sans-serif'], body: ['Inter','sans-serif'] }
+      }
+    }
+  }
+</script>
+<!-- ② Tailwind CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- ③ Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+
+<!-- ④ Firebase 10 Compat CDN – NO npm needed -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+<style>
+  /* Icons */
+  .icon { font-family:'Material Symbols Outlined'; font-style:normal; font-weight:400;
+          font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;
+          vertical-align:middle; line-height:1; display:inline-block; }
+  .icon-fill { font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24; }
+
+  /* Board switcher */
+  #board-switcher { display:flex; gap:10px; align-items:center; }
+  .bsw-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 22px; border-radius: 999px;
+    font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 14px;
+    cursor: pointer; border: 2px solid transparent;
+    transition: all 0.18s ease; white-space: nowrap;
+    background: #e8edf5; color: #003466;
+  }
+  .bsw-btn:hover { background: #d5e1f5; }
+  .bsw-btn.active {
+    background: #003466; color: #ffffff;
+    box-shadow: 0 4px 16px rgba(0,52,102,0.28);
+  }
+  .bsw-btn.active:hover { background: #1a4b84; }
+
+  /* Sync dot */
+  .sync-dot { width:9px; height:9px; border-radius:50%; display:inline-block; flex-shrink:0; }
+  .sync-live { background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,.25); animation:glow 2s infinite; }
+  .sync-offline { background:#94a3b8; }
+  .sync-connecting { background:#f59e0b; animation:glow 1s infinite; }
+  @keyframes glow {
+    0%,100% { box-shadow:0 0 0 3px rgba(34,197,94,.2); }
+    50%      { box-shadow:0 0 0 6px rgba(34,197,94,.08); }
+  }
+
+  /* Cards */
+  .card { cursor:grab; transition:transform .15s,box-shadow .15s; }
+  .card:active { cursor:grabbing; }
+  .card.dragging { opacity:.3; transform:scale(.96); }
+  .drop-col { min-height:80px; transition:background .15s; border-radius:12px; }
+  .drop-col.drag-over { background:rgba(0,52,102,.06); outline:2px dashed #a6c8ff; }
+  .drop-placeholder { height:68px; border:2px dashed #a6c8ff; border-radius:10px;
+                      background:rgba(0,52,102,.04); pointer-events:none; }
+  /* Badge colours */
+  .pr-high   { background:#ffdad6; color:#93000a; }
+  .pr-medium { background:#ffdeac; color:#3a2500; }
+  .pr-low    { background:#e0e5ec; color:#424750; }
+
+  /* Modal */
+  .overlay { position:fixed;inset:0;background:rgba(10,15,25,.5);
+             backdrop-filter:blur(5px);display:flex;align-items:center;
+             justify-content:center;z-index:200; }
+
+  /* Error banner */
+  #fb-error { display:none; margin:12px 32px 0; padding:12px 16px;
+              background:#fff0f0; border:1px solid #fca5a5;
+              border-radius:10px; color:#b91c1c; font-size:13px; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width:5px; height:5px; }
+  ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:4px; }
+</style>
+</head>
+
+<body class="bg-slate-100 text-slate-800 flex min-h-screen" style="font-family:'Inter',sans-serif;">
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     SIDEBAR
+════════════════════════════════════════════════════════════════════════ -->
+<aside class="fixed left-0 top-0 h-screen w-60 flex flex-col py-6 bg-white border-r border-slate-200 z-50 shadow-sm">
+
+  <!-- Logo -->
+  <div class="px-5 mb-8 flex items-center gap-3">
+    <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white"
+         style="background:linear-gradient(135deg,#003466,#1a4b84)">
+      <span class="icon icon-fill" style="font-size:22px">architecture</span>
+    </div>
+    <div>
+      <div style="font-family:'Manrope',sans-serif;font-weight:900;font-size:15px;color:#003466;letter-spacing:-.5px;">The Sanctuary</div>
+      <div class="text-slate-400" style="font-size:10px;letter-spacing:.15em;font-weight:700;text-transform:uppercase;">Deep Work Mode</div>
+    </div>
+  </div>
+
+  <!-- Nav -->
+  <nav class="flex-1 px-3 space-y-1">
+    <div class="flex items-center gap-3 px-4 py-3 rounded-lg font-semibold text-sm cursor-pointer"
+         style="color:#003466;background:#e8edf5;border-right:3px solid #003466;">
+      <span class="icon">folder_open</span> Boards
+    </div>
+    <div class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-500 hover:bg-slate-100 font-semibold text-sm cursor-pointer transition-colors">
+      <span class="icon">assignment</span> Aufgaben
+    </div>
+    <div class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-500 hover:bg-slate-100 font-semibold text-sm cursor-pointer transition-colors">
+      <span class="icon">calendar_today</span> Kalender
+    </div>
+    <div class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-500 hover:bg-slate-100 font-semibold text-sm cursor-pointer transition-colors">
+      <span class="icon">settings</span> Einstellungen
+    </div>
+  </nav>
+
+  <!-- New card btn -->
+  <div class="px-4 mt-auto">
+    <button onclick="openModal()"
+      class="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-95"
+      style="background:#003466;color:#fff;font-family:'Manrope',sans-serif;">
+      <span class="icon">add</span> Neue Karte
+    </button>
+  </div>
+</aside>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     MAIN CONTENT
+════════════════════════════════════════════════════════════════════════ -->
+<div class="flex-1 flex flex-col min-h-screen" style="margin-left:240px;">
+
+  <!-- ── Top bar (logo row) ───────────────────────────────────────────── -->
+  <div class="flex items-center justify-between px-8 py-4 bg-white border-b border-slate-200"
+       style="position:sticky;top:0;z-index:40;">
+    <span style="font-family:'Manrope',sans-serif;font-weight:800;font-size:18px;color:#003466;">
+      Executive Flow
+    </span>
+    <div class="flex items-center gap-3">
+      <button class="p-2 rounded-full hover:bg-slate-100 text-slate-400 transition-colors">
+        <span class="icon">notifications</span>
+      </button>
+      <div class="h-9 w-9 rounded-full flex items-center justify-center text-white text-sm font-bold"
+           style="background:linear-gradient(135deg,#003466,#1a4b84);">BA</div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       BOARD SWITCHER  ← prominent dedicated bar
+  ═══════════════════════════════════════════════════════════════════ -->
+  <div style="background:#fff;border-bottom:2px solid #e2e8f0;padding:14px 32px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:65px;z-index:39;">
+
+    <div id="board-switcher">
+      <button id="btn-personal" class="bsw-btn active" onclick="switchBoard('personal')">
+        <span class="icon" style="font-size:18px;">person</span>
+        Mein Board
+      </button>
+
+      <button id="btn-shared" class="bsw-btn" onclick="switchBoard('shared')">
+        <span class="icon" style="font-size:18px;">group</span>
+        Geteiltes Board
+        <span id="sync-dot" class="sync-dot sync-offline" title="Offline"></span>
+      </button>
+    </div>
+
+    <!-- Status pill -->
+    <div id="board-status"
+         style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:999px;background:#f1f5f9;color:#64748b;">
+      Lokal gespeichert
+    </div>
+  </div>
+
+  <!-- Firebase error banner -->
+  <div id="fb-error">
+    <strong>Firebase-Fehler:</strong> <span id="fb-error-msg"></span>
+    <div style="margin-top:4px;font-size:11px;color:#dc2626;">Details in der Browser-Konsole (F12 → Console)</div>
+  </div>
+
+  <!-- ── Page header ─────────────────────────────────────────────────── -->
+  <main class="flex-1 p-8">
+    <div class="flex items-end justify-between mb-8">
+      <div>
+        <div class="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Produktivitäts-Board</div>
+        <h1 id="board-title"
+            style="font-family:'Manrope',sans-serif;font-weight:900;font-size:36px;color:#003466;line-height:1.1;">
+          Mein Board
+        </h1>
+      </div>
+      <button onclick="openModal()"
+        class="flex items-center gap-2 rounded-xl px-5 py-2.5 font-semibold text-sm text-white transition-all active:scale-95 hover:opacity-90"
+        style="background:#003466;">
+        <span class="icon">add_circle</span> Karte hinzufügen
+      </button>
+    </div>
+
+    <!-- Kanban board -->
+    <div id="board" class="grid gap-6" style="grid-template-columns:repeat(3,minmax(0,1fr));align-items:start;"></div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     MODAL – Add / Edit card
+════════════════════════════════════════════════════════════════════════ -->
+<div id="modal" class="overlay" style="display:none;" onclick="closeModal()">
+  <div onclick="event.stopPropagation()"
+       style="background:#fff;border-radius:16px;padding:32px;width:100%;max-width:460px;box-shadow:0 24px 64px rgba(0,0,0,.18);">
+
+    <div class="flex items-center justify-between mb-6">
+      <h2 id="modal-title"
+          style="font-family:'Manrope',sans-serif;font-weight:800;font-size:20px;color:#003466;">
+        Neue Karte
+      </h2>
+      <button onclick="closeModal()"
+        class="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 transition-colors">
+        <span class="icon">close</span>
+      </button>
+    </div>
+
+    <div class="space-y-4">
+      <div>
+        <label class="block text-sm font-semibold text-slate-500 mb-1">Titel *</label>
+        <input id="inp-title" type="text" placeholder="Aufgabentitel eingeben…"
+          class="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:border-blue-400 transition-all"
+          onkeydown="if(event.key==='Enter')saveCard()"/>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-slate-500 mb-1">Beschreibung</label>
+        <textarea id="inp-desc" rows="3" placeholder="Optionale Beschreibung…"
+          class="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:border-blue-400 transition-all resize-none"></textarea>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-semibold text-slate-500 mb-1">Priorität</label>
+          <select id="inp-priority"
+            class="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none bg-white">
+            <option value="high">Hoch</option>
+            <option value="medium" selected>Mittel</option>
+            <option value="low">Niedrig</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-500 mb-1">Spalte</label>
+          <select id="inp-column"
+            class="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none bg-white">
+            <option value="todo">Zu erledigen</option>
+            <option value="inprogress">In Bearbeitung</option>
+            <option value="done">Fertig</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex gap-3 mt-6">
+      <button onclick="closeModal()"
+        class="flex-1 py-3 border border-slate-300 rounded-xl font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+        Abbrechen
+      </button>
+      <button onclick="saveCard()"
+        class="flex-1 py-3 rounded-xl font-semibold text-white transition-all active:scale-95 hover:opacity-90"
+        style="background:#003466;">
+        Speichern
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+// ─── Helpers ─────────────────────────────────────────────────────────────
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+function clone(o) { return JSON.parse(JSON.stringify(o)); }
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── Firebase ────────────────────────────────────────────────────────────
+const FB_CONFIG = {
+  apiKey:            "AIzaSyDC8TKNm753-PcnS8s_9fw8E7btbFCNTUw",
+  authDomain:        "ates-kanban.firebaseapp.com",
+  projectId:         "ates-kanban",
+  storageBucket:     "ates-kanban.firebasestorage.app",
+  messagingSenderId: "707150567054",
+  appId:             "1:707150567054:web:ca6d36423be1458d821bdf"
+};
+
+let db         = null;
+let sharedDoc  = null;
+let unsubscribe = null;
+
+(function initFirebase() {
+  if (typeof firebase === 'undefined') {
+    console.error('[Firebase] ❌ firebase global nicht gefunden – CDN-Skript nicht geladen.');
+    return;
+  }
+  try {
+    firebase.initializeApp(FB_CONFIG);
+    db        = firebase.firestore();
+    sharedDoc = db.collection('boards').doc('shared');
+    console.log('[Firebase] ✅ App initialisiert – Projekt:', FB_CONFIG.projectId);
+    console.log('[Firebase] ✅ Firestore bereit – Ziel: boards/shared');
+  } catch (e) {
+    console.error('[Firebase] ❌ Initialisierung fehlgeschlagen:', e.message);
+  }
+})();
+
+// ─── Data model ──────────────────────────────────────────────────────────
+const COLS = [
+  { id:'todo',       label:'Zu erledigen',   headColor:'#003466' },
+  { id:'inprogress', label:'In Bearbeitung',  headColor:'#5c3a00' },
+  { id:'done',       label:'Fertig',          headColor:'#1a4b84' },
+];
+
+const DEFAULTS = {
+  columns: {
+    todo: [
+      { id:uid(), title:'Layout-Struktur finalisieren',
+        desc:'Vollständigen Architekturentwurf für das Dashboard erstellen.', priority:'high' },
+      { id:uid(), title:'Brand Assets prüfen',
+        desc:'Mit Marketing abstimmen, damit Typografie und Logos passen.', priority:'medium' },
+    ],
+    inprogress: [
+      { id:uid(), title:'Frontend API-Integration',
+        desc:'Kanban-Status mit Backend-Services über REST verbinden.', priority:'high' },
+    ],
+    done: [
+      { id:uid(), title:'System-Konfiguration',
+        desc:'Projekt-Repository und Tailwind CSS eingerichtet.', priority:'low' },
+    ]
+  }
+};
+
+// ─── App state ───────────────────────────────────────────────────────────
+let activeBoard = 'personal';
+let data = { columns:{ todo:[], inprogress:[], done:[] } };
+let editId  = null;
+let editCol = null;
+
+// Drag state
+let dragCol = null;
+let dragIdx = null;
+let placeholder = null;
+
+// ─── localStorage ────────────────────────────────────────────────────────
+function loadLocal() {
+  const raw = localStorage.getItem('kanban_personal');
+  if (raw) { try { return JSON.parse(raw); } catch(e) {} }
+  const d = clone(DEFAULTS);
+  saveLocal(d);
+  return d;
+}
+function saveLocal(d) {
+  localStorage.setItem('kanban_personal', JSON.stringify(d));
+}
+
+// ─── Firestore ───────────────────────────────────────────────────────────
+function connectFirestore() {
+  if (!sharedDoc) {
+    showError('Firebase nicht initialisiert. Bitte Seite neu laden und Konsole (F12) prüfen.');
+    return;
+  }
+  setSyncDot('connecting');
+  hideError();
+  console.log('[Firestore] 🔄 Verbinde Echtzeit-Listener für boards/shared …');
+
+  unsubscribe = sharedDoc.onSnapshot(
+    snap => {
+      if (snap.exists) {
+        data = snap.data();
+        console.log('[Firestore] ✅ Daten empfangen –',
+          Object.values(data.columns).flat().length, 'Karte(n)');
+      } else {
+        console.log('[Firestore] 📄 Kein Dokument vorhanden – wird angelegt …');
+        data = { columns:{ todo:[], inprogress:[], done:[] } };
+        sharedDoc.set(data)
+          .then(() => console.log('[Firestore] ✅ Leeres Board angelegt.'))
+          .catch(e  => console.error('[Firestore] ❌ Anlegen fehlgeschlagen:', e.message));
+      }
+      setSyncDot('live');
+      hideError();
+      render();
+    },
+    err => {
+      console.error('[Firestore] ❌ Listener-Fehler:', err.code, '–', err.message);
+      setSyncDot('offline');
+      if (err.code === 'permission-denied') {
+        console.warn('[Firestore] 💡 Firestore-Regeln anpassen:\n' +
+          'Firebase Console → ates-kanban → Firestore → Regeln:\n' +
+          '  allow read, write: if true;');
+        showError('Zugriff verweigert (permission-denied). ' +
+          'Bitte Firestore-Sicherheitsregeln in der Firebase Console auf ' +
+          '"allow read, write: if true;" setzen.');
+      } else if (err.code === 'unavailable') {
+        showError('Firestore nicht erreichbar – Internetverbindung prüfen.');
+      } else {
+        showError(err.message);
+      }
+    }
+  );
+}
+
+function disconnectFirestore() {
+  if (unsubscribe) {
+    unsubscribe();
+    unsubscribe = null;
+    console.log('[Firestore] 🔌 Listener getrennt.');
+  }
+  setSyncDot('offline');
+}
+
+async function persistShared() {
+  if (!sharedDoc) return;
+  try {
+    console.log('[Firestore] 💾 Speichere …');
+    await sharedDoc.set(data);
+    console.log('[Firestore] ✅ Gespeichert.');
+  } catch(e) {
+    console.error('[Firestore] ❌ Speichern fehlgeschlagen:', e.code, e.message);
+    if (e.code === 'permission-denied')
+      showError('Schreiben verweigert – Firestore-Regeln prüfen.');
+  }
+}
+
+// ─── Board switcher ──────────────────────────────────────────────────────
+function switchBoard(board) {
+  if (board === activeBoard) return;
+  activeBoard = board;
+
+  const pBtn = document.getElementById('btn-personal');
+  const sBtn = document.getElementById('btn-shared');
+  const title  = document.getElementById('board-title');
+  const status = document.getElementById('board-status');
+
+  if (board === 'personal') {
+    pBtn.classList.add('active');
+    sBtn.classList.remove('active');
+    title.textContent  = 'Mein Board';
+    status.textContent = 'Lokal gespeichert';
+    status.style.cssText = 'font-size:12px;font-weight:600;padding:5px 14px;border-radius:999px;background:#f1f5f9;color:#64748b;';
+    disconnectFirestore();
+    hideError();
+    data = loadLocal();
+    render();
+    console.log('[Kanban] ▶ Mein Board aktiv (localStorage)');
+  } else {
+    sBtn.classList.add('active');
+    pBtn.classList.remove('active');
+    title.textContent  = 'Geteiltes Board';
+    status.textContent = '⏳ Verbinde …';
+    status.style.cssText = 'font-size:12px;font-weight:600;padding:5px 14px;border-radius:999px;background:#fef3c7;color:#92400e;';
+    connectFirestore();
+    console.log('[Kanban] ▶ Geteiltes Board aktiv (Firestore Echtzeit-Sync)');
+  }
+}
+
+// ─── Sync dot ────────────────────────────────────────────────────────────
+function setSyncDot(state) {
+  const dot    = document.getElementById('sync-dot');
+  const status = document.getElementById('board-status');
+  dot.className = 'sync-dot ' + ({
+    live:'sync-live', offline:'sync-offline', connecting:'sync-connecting'
+  }[state] || 'sync-offline');
+
+  if (activeBoard !== 'shared') return;
+  if (state === 'live') {
+    dot.title = 'Echtzeit-Sync aktiv';
+    status.textContent = '🟢 Live-Sync aktiv';
+    status.style.cssText = 'font-size:12px;font-weight:600;padding:5px 14px;border-radius:999px;background:#dcfce7;color:#15803d;';
+  } else if (state === 'connecting') {
+    dot.title = 'Verbinde …';
+  } else {
+    dot.title = 'Offline';
+    status.textContent = '🔴 Offline';
+    status.style.cssText = 'font-size:12px;font-weight:600;padding:5px 14px;border-radius:999px;background:#fee2e2;color:#b91c1c;';
+  }
+}
+
+// ─── Error banner ────────────────────────────────────────────────────────
+function showError(msg) {
+  const b = document.getElementById('fb-error');
+  document.getElementById('fb-error-msg').textContent = msg;
+  b.style.display = 'block';
+}
+function hideError() {
+  document.getElementById('fb-error').style.display = 'none';
+}
+
+// ─── Render ──────────────────────────────────────────────────────────────
+function render() {
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+  COLS.forEach(col => {
+    const cards = data.columns[col.id] || [];
+    board.appendChild(buildColumn(col, cards));
+  });
+}
+
+function buildColumn(col, cards) {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
+
+  // Header
+  const hdr = document.createElement('div');
+  hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0 4px 8px;';
+  hdr.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;">
+      <h2 style="font-family:'Manrope',sans-serif;font-weight:800;font-size:17px;color:${col.headColor};">
+        ${col.label}
+      </h2>
+      <span style="padding:2px 9px;background:#e8edf5;border-radius:999px;font-size:12px;font-weight:700;color:#64748b;">
+        ${cards.length}
+      </span>
+    </div>
+    <button onclick="openModal('${col.id}')"
+      style="padding:4px;border-radius:50%;cursor:pointer;color:#94a3b8;background:transparent;transition:background .15s;"
+      onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
+      <span class="icon" style="font-size:20px;">add</span>
+    </button>`;
+  wrap.appendChild(hdr);
+
+  // Drop zone
+  const zone = document.createElement('div');
+  zone.className = 'drop-col';
+  zone.dataset.col = col.id;
+  zone.style.cssText = 'display:flex;flex-direction:column;gap:10px;padding:4px 0;';
+  zone.addEventListener('dragover',  onDragOver);
+  zone.addEventListener('dragleave', onDragLeave);
+  zone.addEventListener('drop',      onDrop);
+  cards.forEach((c,i) => zone.appendChild(buildCard(c, col.id, i)));
+  wrap.appendChild(zone);
+
+  // Add-card button
+  const addBtn = document.createElement('button');
+  addBtn.style.cssText = 'width:100%;padding:14px;border:2px dashed #cbd5e1;border-radius:12px;font-size:13px;font-weight:600;color:#94a3b8;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s;';
+  addBtn.innerHTML = `<span class="icon" style="font-size:18px;">add_circle</span> Neue Karte`;
+  addBtn.onmouseover = () => { addBtn.style.borderColor='#93c5fd'; addBtn.style.color='#3b82f6'; addBtn.style.background='rgba(59,130,246,.04)'; };
+  addBtn.onmouseout  = () => { addBtn.style.borderColor='#cbd5e1'; addBtn.style.color='#94a3b8'; addBtn.style.background='transparent'; };
+  addBtn.onclick = () => openModal(col.id);
+  wrap.appendChild(addBtn);
+
+  return wrap;
+}
+
+function buildCard(card, colId, idx) {
+  const isDone = colId === 'done';
+  const prMap = { high:{cls:'pr-high',label:'Hoch'}, medium:{cls:'pr-medium',label:'Mittel'}, low:{cls:'pr-low',label:'Niedrig'} };
+  const pr = prMap[card.priority] || prMap.medium;
+
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.draggable = true;
+  el.dataset.id  = card.id;
+  el.dataset.col = colId;
+  el.dataset.idx = idx;
+  el.style.cssText = `background:#fff;border-radius:12px;padding:16px 18px;
+    box-shadow:0 2px 12px rgba(0,0,0,.07);border:1px solid #f1f5f9;
+    opacity:${isDone ? '.65' : '1'};`;
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;">
+      <span class="${pr.cls}" style="padding:3px 10px;border-radius:999px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;">
+        ${pr.label}
+      </span>
+      <div style="display:flex;align-items:center;gap:2px;" class="card-actions" style="opacity:0;">
+        ${isDone ? '<span class="icon" style="color:#22c55e;font-size:20px;" title="Fertig">check_circle</span>' : ''}
+        <button onclick="event.stopPropagation();editCard('${colId}','${card.id}')"
+          style="padding:3px;border-radius:6px;background:transparent;cursor:pointer;color:#94a3b8;transition:all .12s;"
+          onmouseover="this.style.background='#f1f5f9';this.style.color='#003466'"
+          onmouseout="this.style.background='transparent';this.style.color='#94a3b8'">
+          <span class="icon" style="font-size:16px;">edit</span>
+        </button>
+        <button onclick="event.stopPropagation();deleteCard('${colId}','${card.id}')"
+          style="padding:3px;border-radius:6px;background:transparent;cursor:pointer;color:#94a3b8;transition:all .12s;"
+          onmouseover="this.style.background='#fff0f0';this.style.color='#ef4444'"
+          onmouseout="this.style.background='transparent';this.style.color='#94a3b8'">
+          <span class="icon" style="font-size:16px;">delete</span>
+        </button>
+        <span class="icon" style="font-size:18px;color:#cbd5e1;cursor:grab;">drag_indicator</span>
+      </div>
+    </div>
+    <h3 style="font-family:'Manrope',sans-serif;font-weight:700;font-size:14px;color:${isDone?'#94a3b8':'#1e293b'};
+               ${isDone?'text-decoration:line-through;':''}margin-bottom:${card.desc?'6px':'0'};">
+      ${esc(card.title)}
+    </h3>
+    ${card.desc ? `<p style="font-size:12.5px;color:#64748b;line-height:1.55;">${esc(card.desc)}</p>` : ''}
+  `;
+
+  el.addEventListener('dragstart', onDragStart);
+  el.addEventListener('dragend',   onDragEnd);
+  return el;
+}
+
+// ─── Drag & Drop ─────────────────────────────────────────────────────────
+function onDragStart(e) {
+  dragCol = e.currentTarget.dataset.col;
+  dragIdx = +e.currentTarget.dataset.idx;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', e.currentTarget.dataset.id);
+  setTimeout(() => e.currentTarget.classList.add('dragging'), 0);
+}
+function onDragEnd(e) {
+  e.currentTarget.classList.remove('dragging');
+  removePlaceholder();
+  document.querySelectorAll('.drop-col').forEach(z => z.classList.remove('drag-over'));
+}
+function onDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const zone = e.currentTarget;
+  zone.classList.add('drag-over');
+  removePlaceholder();
+  placeholder = document.createElement('div');
+  placeholder.className = 'drop-placeholder';
+  const after = afterElement(zone, e.clientY);
+  after ? zone.insertBefore(placeholder, after) : zone.appendChild(placeholder);
+}
+function onDragLeave(e) {
+  if (!e.currentTarget.contains(e.relatedTarget)) {
+    e.currentTarget.classList.remove('drag-over');
+    removePlaceholder();
+  }
+}
+function onDrop(e) {
+  e.preventDefault();
+  const zone   = e.currentTarget;
+  const cardId = e.dataTransfer.getData('text/plain');
+  const dest   = zone.dataset.col;
+  zone.classList.remove('drag-over');
+
+  const src = data.columns[dragCol];
+  const ci  = src.findIndex(c => c.id === cardId);
+  if (ci === -1) { removePlaceholder(); return; }
+  const [card] = src.splice(ci, 1);
+
+  // Determine insert index from placeholder position
+  const kids  = [...zone.children].filter(el => el !== placeholder);
+  const phPos = placeholder ? [...zone.children].indexOf(placeholder) : Infinity;
+  const destCards = data.columns[dest];
+  const insertAt  = Math.min(phPos, destCards.length);
+  destCards.splice(insertAt, 0, card);
+
+  removePlaceholder();
+  persist();
+  render();
+}
+function afterElement(zone, y) {
+  return [...zone.querySelectorAll('.card:not(.dragging)')].reduce((best, el) => {
+    const { top, height } = el.getBoundingClientRect();
+    const off = y - top - height / 2;
+    return off < 0 && off > best.off ? { off, el } : best;
+  }, { off: -Infinity, el: null }).el;
+}
+function removePlaceholder() {
+  if (placeholder?.parentNode) placeholder.parentNode.removeChild(placeholder);
+  placeholder = null;
+}
+
+// ─── CRUD ────────────────────────────────────────────────────────────────
+function persist() {
+  if (activeBoard === 'personal') saveLocal(data);
+  else persistShared();
+}
+
+function deleteCard(colId, cardId) {
+  data.columns[colId] = data.columns[colId].filter(c => c.id !== cardId);
+  persist();
+  render();
+}
+
+function editCard(colId, cardId) {
+  const card = data.columns[colId]?.find(c => c.id === cardId);
+  if (!card) return;
+  editId  = cardId;
+  editCol = colId;
+  document.getElementById('modal-title').textContent = 'Karte bearbeiten';
+  document.getElementById('inp-title').value    = card.title;
+  document.getElementById('inp-desc').value     = card.desc || '';
+  document.getElementById('inp-priority').value = card.priority || 'medium';
+  document.getElementById('inp-column').value   = colId;
+  document.getElementById('modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('inp-title').focus(), 40);
+}
+
+// ─── Modal ───────────────────────────────────────────────────────────────
+function openModal(colId) {
+  editId  = null;
+  editCol = null;
+  document.getElementById('modal-title').textContent = 'Neue Karte';
+  document.getElementById('inp-title').value    = '';
+  document.getElementById('inp-desc').value     = '';
+  document.getElementById('inp-priority').value = 'medium';
+  document.getElementById('inp-column').value   = colId || 'todo';
+  document.getElementById('modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('inp-title').focus(), 40);
+}
+
+function closeModal() {
+  document.getElementById('modal').style.display = 'none';
+  editId = editCol = null;
+}
+
+function saveCard() {
+  const titleEl = document.getElementById('inp-title');
+  const title = titleEl.value.trim();
+  if (!title) { titleEl.style.borderColor = '#ef4444'; titleEl.focus(); return; }
+  titleEl.style.borderColor = '';
+
+  const desc     = document.getElementById('inp-desc').value.trim();
+  const priority = document.getElementById('inp-priority').value;
+  const colId    = document.getElementById('inp-column').value;
+
+  if (editId) {
+    // Move column if changed
+    const old = data.columns[editCol];
+    const i   = old.findIndex(c => c.id === editId);
+    if (i !== -1) {
+      const card = old[i];
+      card.title = title; card.desc = desc; card.priority = priority;
+      if (colId !== editCol) {
+        old.splice(i, 1);
+        data.columns[colId].push(card);
+      }
+    }
+  } else {
+    data.columns[colId].push({ id:uid(), title, desc, priority });
+  }
+
+  closeModal();
+  persist();
+  render();
+}
+
+// ─── Boot ────────────────────────────────────────────────────────────────
+console.log('[Kanban] 🚀 App startet …');
+data = loadLocal();
+render();
+console.log('[Kanban] ✅ "Mein Board" geladen –',
+  Object.values(data.columns).flat().length, 'Karte(n) aus localStorage.');
+console.log('[Kanban] 💡 Klick auf "Geteiltes Board" → Firestore-Sync startet.');
+</script>
+</body>
+</html>
