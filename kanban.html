@@ -279,27 +279,6 @@ html[data-theme="dark"] .fi:focus{box-shadow:0 0 0 3px rgba(59,130,246,.15);}
           <span id="sync-dot" class="dot dot-off" title="Offline"></span>
         </button>
       </div>
-      <!-- Share link panel (shared board only) -->
-      <div id="share-panel" style="display:none;align-items:center;gap:0;
-        border:1px solid var(--border);border-radius:999px;background:var(--bg);overflow:hidden;">
-        <span class="icon" style="font-size:14px;color:var(--muted);padding:0 8px 0 12px;flex-shrink:0;">link</span>
-        <a id="share-link" href="#" target="_blank"
-          style="font-size:11px;font-weight:600;color:var(--accent);text-decoration:none;
-                 white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;
-                 padding:7px 0;cursor:pointer;"
-          title="Im Browser öffnen">
-          —
-        </a>
-        <button onclick="copyShareLink()" title="Link kopieren"
-          style="display:flex;align-items:center;gap:5px;padding:7px 13px;margin-left:6px;
-                 background:var(--accent);color:#fff;border:none;cursor:pointer;
-                 font-size:11px;font-weight:700;white-space:nowrap;transition:opacity .15s;flex-shrink:0;"
-          onmouseover="this.style.opacity='.82'" onmouseout="this.style.opacity='1'">
-          <span class="icon" style="font-size:14px;">content_copy</span> Kopieren
-        </button>
-      </div>
-      <!-- Online users -->
-      <div id="online-users" style="display:flex;align-items:center;gap:-4px;margin-left:4px;"></div>
     </div>
     <div id="board-status"
       style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:999px;
@@ -346,6 +325,14 @@ html[data-theme="dark"] .fi:focus{box-shadow:0 0 0 3px rgba(59,130,246,.15);}
           <span class="icon">add_circle</span> Karte hinzufügen
         </button>
       </div>
+    </div>
+
+    <!-- MEMBERS BAR (shared board only) -->
+    <div id="members-bar" style="display:none;margin-bottom:20px;padding:14px 18px;
+      background:var(--surface);border:1px solid var(--border);border-radius:14px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+                  color:var(--muted);margin-bottom:10px;">Board-Mitglieder</div>
+      <div id="members-list" style="display:flex;flex-wrap:wrap;gap:10px;"></div>
     </div>
 
     <!-- BOARD VIEW -->
@@ -640,13 +627,6 @@ function copyShareLink() {
   });
 }
 
-function updateSharePanel() {
-  const u = new URL(location.href);
-  u.searchParams.set('board', getBoardId());
-  const href = u.href;
-  const link = document.getElementById('share-link');
-  if (link) { link.href = href; link.textContent = href; }
-}
 
 function waShareLink() {
   const u = new URL(location.href);
@@ -728,7 +708,7 @@ function startPresence() {
         const ls = d.lastSeen?.toMillis?.() || 0;
         if (now - ls < 60000) onlineUsers[doc.id] = { name: d.name||'?', color: d.color||'#94a3b8' };
       });
-      renderOnlineUsers();
+      renderMembersBar();
     }, ()=>{});
 
   window.addEventListener('beforeunload', () => {
@@ -741,24 +721,41 @@ function stopPresence() {
   if (heartTimer) { clearInterval(heartTimer); heartTimer = null; }
   if (presUnsub)  { presUnsub(); presUnsub = null; }
   onlineUsers = {};
-  renderOnlineUsers();
+  renderMembersBar();
   if (db && boardId && myUserId) {
     db.collection('boards').doc(boardId).collection('presence').doc(myUserId).delete().catch(()=>{});
   }
 }
 
-function renderOnlineUsers() {
-  const el = document.getElementById('online-users');
-  if (!el) return;
-  if (board !== 'shared') { el.innerHTML = ''; return; }
-  const users = Object.entries(onlineUsers);
-  if (!users.length) { el.innerHTML = ''; return; }
-  el.innerHTML = users.map(([uid_, u]) => `
-    <div class="av" title="${esc(u.name)}"
-      style="background:${esc(u.color)};${uid_===myUserId?'box-shadow:0 0 0 2px var(--accent);':''}
-             margin-left:-6px;">
-      ${esc(u.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase())}
-    </div>`).join('');
+function renderMembersBar() {
+  const bar  = document.getElementById('members-bar');
+  const list = document.getElementById('members-list');
+  if (!bar || !list) return;
+  if (board !== 'shared') { bar.style.display = 'none'; return; }
+  const members = data.members || {};
+  if (!Object.keys(members).length) { bar.style.display = 'none'; return; }
+  bar.style.display = 'block';
+  list.innerHTML = Object.entries(members).map(([uid_, u]) => {
+    const isOnline = !!onlineUsers[uid_];
+    const initials = (u.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    const isMe = uid_ === myUserId;
+    return `
+    <div style="display:flex;flex-direction:column;align-items:center;gap:5px;min-width:46px;">
+      <div style="position:relative;">
+        <div class="av" title="${esc(u.name)}"
+          style="width:36px;height:36px;font-size:12px;background:${esc(u.color||'#94a3b8')};
+                 ${isMe?'box-shadow:0 0 0 2px var(--accent);':''}">
+          ${esc(initials)}
+        </div>
+        ${isOnline ? `<div style="position:absolute;bottom:0;right:0;width:10px;height:10px;
+          border-radius:50%;background:#22c55e;border:2px solid var(--surface);"></div>` : ''}
+      </div>
+      <span style="font-size:10px;font-weight:600;color:var(--muted);text-align:center;
+                   max-width:52px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+        ${esc(isMe ? 'Du' : u.name)}
+      </span>
+    </div>`;
+  }).join('');
 }
 
 // ── Notifications Bell ────────────────────────────────────────────
@@ -1035,6 +1032,11 @@ function connectFS() {
       if (!inc.tasks)      inc.tasks      = [];
       if (!inc.calEntries) inc.calEntries = [];
       if (!inc.members)    inc.members    = {};
+      // Register self in members if not yet present
+      if (myName && !inc.members[myUserId]) {
+        inc.members[myUserId] = { name: myName, color: myColor };
+        sdoc.update({ [`members.${myUserId}`]: { name: myName, color: myColor } }).catch(()=>{});
+      }
       console.log('[Firestore] ✅ Daten –', Object.values(inc.columns).flat().length, 'Karten');
     } else {
       inc = emptyData();
@@ -1065,9 +1067,10 @@ async function persistShared() {
   if (!sdoc) return;
   try {
     localWr = true;
-    if (!data.members) data.members = {};
-    if (myName) data.members[myUserId] = { name: myName, color: myColor };
+    if (!data.members)    data.members    = {};
+    if (!data.tasks)      data.tasks      = [];
     if (!data.calEntries) data.calEntries = [];
+    if (myName) data.members[myUserId] = { name: myName, color: myColor };
     await sdoc.set(data);
   } catch(e) {
     localWr = false;
@@ -1152,14 +1155,12 @@ function switchBoard(b) {
 
   if (b === 'personal') {
     setStatus('Lokal gespeichert','var(--bg)','var(--muted)');
-    document.getElementById('share-panel').style.display = 'none';
     document.getElementById('wa-share-btn').style.display = 'none';
+    document.getElementById('members-bar').style.display  = 'none';
     data = loadLocal(); render();
     console.log('[Kanban] ▶ Mein Board (localStorage)');
   } else {
     getBoardId();
-    updateSharePanel();
-    document.getElementById('share-panel').style.display = 'flex';
     document.getElementById('wa-share-btn').style.display = 'flex';
     if (!myName) { showNamePopup(); return; }
     setStatus('⏳ Verbinde …','#fef3c7','#92400e');
@@ -1186,6 +1187,7 @@ function switchView(v) {
 }
 
 function render() {
+  renderMembersBar();
   if (view==='board')    renderBoard();
   if (view==='calendar') renderCalendar();
   if (view==='tasks')    renderTasks();
