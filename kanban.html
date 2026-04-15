@@ -279,15 +279,25 @@ html[data-theme="dark"] .fi:focus{box-shadow:0 0 0 3px rgba(59,130,246,.15);}
           <span id="sync-dot" class="dot dot-off" title="Offline"></span>
         </button>
       </div>
-      <!-- Share link button (shared board only) -->
-      <button id="share-btn" onclick="copyShareLink()" style="display:none;
-        align-items:center;gap:6px;padding:7px 14px;border-radius:999px;
-        border:1px solid var(--border);background:var(--bg);color:var(--muted);
-        font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;"
-        onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
-        onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
-        <span class="icon" style="font-size:15px;">link</span> Link kopieren
-      </button>
+      <!-- Share link panel (shared board only) -->
+      <div id="share-panel" style="display:none;align-items:center;gap:0;
+        border:1px solid var(--border);border-radius:999px;background:var(--bg);overflow:hidden;">
+        <span class="icon" style="font-size:14px;color:var(--muted);padding:0 8px 0 12px;flex-shrink:0;">link</span>
+        <a id="share-link" href="#" target="_blank"
+          style="font-size:11px;font-weight:600;color:var(--accent);text-decoration:none;
+                 white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;
+                 padding:7px 0;cursor:pointer;"
+          title="Im Browser öffnen">
+          —
+        </a>
+        <button onclick="copyShareLink()" title="Link kopieren"
+          style="display:flex;align-items:center;gap:5px;padding:7px 13px;margin-left:6px;
+                 background:var(--accent);color:#fff;border:none;cursor:pointer;
+                 font-size:11px;font-weight:700;white-space:nowrap;transition:opacity .15s;flex-shrink:0;"
+          onmouseover="this.style.opacity='.82'" onmouseout="this.style.opacity='1'">
+          <span class="icon" style="font-size:14px;">content_copy</span> Kopieren
+        </button>
+      </div>
       <!-- Online users -->
       <div id="online-users" style="display:flex;align-items:center;gap:-4px;margin-left:4px;"></div>
     </div>
@@ -608,14 +618,22 @@ function getBoardId() {
 function copyShareLink() {
   const u = new URL(location.href);
   u.searchParams.set('board', getBoardId());
-  navigator.clipboard.writeText(u.href)
-    .then(() => toast('Link kopiert! Teile ihn mit anderen.', 'success'))
-    .catch(() => {
-      const inp = document.createElement('input');
-      inp.value = u.href; document.body.appendChild(inp); inp.select();
-      document.execCommand('copy'); document.body.removeChild(inp);
-      toast('Link kopiert!', 'success');
-    });
+  const href = u.href;
+  const doToast = () => toast('Link kopiert!', 'success');
+  navigator.clipboard.writeText(href).then(doToast).catch(() => {
+    const inp = document.createElement('input');
+    inp.value = href; document.body.appendChild(inp); inp.select();
+    document.execCommand('copy'); document.body.removeChild(inp);
+    doToast();
+  });
+}
+
+function updateSharePanel() {
+  const u = new URL(location.href);
+  u.searchParams.set('board', getBoardId());
+  const href = u.href;
+  const link = document.getElementById('share-link');
+  if (link) { link.href = href; link.textContent = href; }
 }
 
 // ── Data model ───────────────────────────────────────────────────
@@ -1109,12 +1127,13 @@ function switchBoard(b) {
 
   if (b === 'personal') {
     setStatus('Lokal gespeichert','var(--bg)','var(--muted)');
-    document.getElementById('share-btn').style.display = 'none';
+    document.getElementById('share-panel').style.display = 'none';
     data = loadLocal(); render();
     console.log('[Kanban] ▶ Mein Board (localStorage)');
   } else {
     getBoardId();
-    document.getElementById('share-btn').style.display = 'inline-flex';
+    updateSharePanel();
+    document.getElementById('share-panel').style.display = 'flex';
     if (!myName) { showNamePopup(); return; }
     setStatus('⏳ Verbinde …','#fef3c7','#92400e');
     connectFS(); startPresence(); subscribeNotifs();
