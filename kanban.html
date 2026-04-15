@@ -327,13 +327,25 @@ html[data-theme="dark"] .fi:focus{box-shadow:0 0 0 3px rgba(59,130,246,.15);}
           Mein Board
         </h1>
       </div>
-      <button id="add-card-btn" onclick="openCardModal()"
-        style="display:flex;align-items:center;gap:7px;padding:10px 20px;border-radius:12px;
-               background:var(--accent);color:#fff;font-family:'Manrope',sans-serif;
-               font-weight:700;font-size:13px;cursor:pointer;border:none;transition:opacity .15s;"
-        onmouseover="this.style.opacity='.82'" onmouseout="this.style.opacity='1'">
-        <span class="icon">add_circle</span> Karte hinzufügen
-      </button>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <!-- WhatsApp-style share button (shared board only) -->
+        <button id="wa-share-btn" onclick="waShareLink()" style="display:none;
+          align-items:center;gap:8px;padding:10px 20px;border-radius:12px;
+          background:#25d366;color:#fff;font-family:'Manrope',sans-serif;
+          font-weight:700;font-size:13px;cursor:pointer;border:none;
+          box-shadow:0 4px 14px rgba(37,211,102,.35);transition:all .15s;"
+          onmouseover="this.style.opacity='.85';this.style.transform='translateY(-1px)'"
+          onmouseout="this.style.opacity='1';this.style.transform='translateY(0)'">
+          <span class="icon" style="font-size:18px;">share</span> Link teilen
+        </button>
+        <button id="add-card-btn" onclick="openCardModal()"
+          style="display:flex;align-items:center;gap:7px;padding:10px 20px;border-radius:12px;
+                 background:var(--accent);color:#fff;font-family:'Manrope',sans-serif;
+                 font-weight:700;font-size:13px;cursor:pointer;border:none;transition:opacity .15s;"
+          onmouseover="this.style.opacity='.82'" onmouseout="this.style.opacity='1'">
+          <span class="icon">add_circle</span> Karte hinzufügen
+        </button>
+      </div>
     </div>
 
     <!-- BOARD VIEW -->
@@ -634,6 +646,19 @@ function updateSharePanel() {
   const href = u.href;
   const link = document.getElementById('share-link');
   if (link) { link.href = href; link.textContent = href; }
+}
+
+function waShareLink() {
+  const u = new URL(location.href);
+  u.searchParams.set('board', getBoardId());
+  const href = u.href;
+  const doToast = () => toast('Link kopiert! Jetzt in WhatsApp einfügen 📋', 'success');
+  navigator.clipboard.writeText(href).then(doToast).catch(() => {
+    const inp = document.createElement('input');
+    inp.value = href; document.body.appendChild(inp); inp.select();
+    document.execCommand('copy'); document.body.removeChild(inp);
+    doToast();
+  });
 }
 
 // ── Data model ───────────────────────────────────────────────────
@@ -1128,12 +1153,14 @@ function switchBoard(b) {
   if (b === 'personal') {
     setStatus('Lokal gespeichert','var(--bg)','var(--muted)');
     document.getElementById('share-panel').style.display = 'none';
+    document.getElementById('wa-share-btn').style.display = 'none';
     data = loadLocal(); render();
     console.log('[Kanban] ▶ Mein Board (localStorage)');
   } else {
     getBoardId();
     updateSharePanel();
     document.getElementById('share-panel').style.display = 'flex';
+    document.getElementById('wa-share-btn').style.display = 'flex';
     if (!myName) { showNamePopup(); return; }
     setStatus('⏳ Verbinde …','#fef3c7','#92400e');
     connectFS(); startPresence(); subscribeNotifs();
