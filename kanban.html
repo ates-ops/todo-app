@@ -1812,7 +1812,27 @@ ${boardContext}`,
       })
     });
 
-    const resul
+    const result = await response.json();
+
+    if (result.error) {
+      removeAiLoading();
+      addAiMessage('assistant', 'Fehler: ' + result.error.message);
+      return;
+    }
+
+    const reply = result.content[0].text;
+    removeAiLoading();
+    addAiMessage('assistant', reply);
+
+  } catch (err) {
+    removeAiLoading();
+    addAiMessage('assistant', 'Verbindungsfehler. Bitte prüfe deinen API Key und die Internetverbindung.');
+    console.error('[AI]', err);
+  }
+
+  document.getElementById('ai-send-btn').disabled = false;
+  input.focus();
+}
 console.log('[Ates-Board] 🚀 Startet …');
 applyTheme();
 applyNotifUI();
