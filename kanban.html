@@ -204,9 +204,6 @@ html[data-theme="dark"] .fi:focus{box-shadow:0 0 0 3px rgba(59,130,246,.15);}
     <div class="ni" id="ni-settings">
   <span class="icon">settings</span> Einstellungen
 </div>
-<div class="ni" id="ni-ai" onclick="switchView('ai')">
-  <span class="icon">smart_toy</span> KI-Assistent
-</div>
   </nav>
   <div style="padding:0 12px 20px;">
     <button onclick="openCardModal()"
@@ -1772,6 +1769,7 @@ function addAiMessage(role, text) {
     btn.onmouseover = () => btn.style.opacity = '.8';
     btn.onmouseout  = () => btn.style.opacity = '1';
     btn.onclick = () => {
+      if (!data.columns['todo']) data.columns['todo'] = [];
       data.columns['todo'].push({
         id: uid(),
         title: clean.slice(0, 80),
@@ -1780,7 +1778,6 @@ function addAiMessage(role, text) {
         dueDate: ''
       });
       persist();
-      render();
       btn.textContent = '✓ Hinzugefügt';
       btn.style.background = '#22c55e';
       btn.disabled = true;
