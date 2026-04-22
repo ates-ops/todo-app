@@ -381,11 +381,7 @@ html[data-theme="dark"] .fi:focus{box-shadow:0 0 0 3px rgba(59,130,246,.15);}
     </div>
 
     <!-- TASKS / CHECKLIST VIEW -->
-<<<<<<< HEAD
      <!-- AI VIEW -->
-=======
-    <!-- AI VIEW -->
->>>>>>> 737acf342071e24dd00e350bbf7ca3780d3a1803
 <div id="v-ai" style="display:none;max-width:720px;">
   
   <!-- API Key Eingabe -->
@@ -433,11 +429,8 @@ html[data-theme="dark"] .fi:focus{box-shadow:0 0 0 3px rgba(59,130,246,.15);}
         Senden
       </button>
     </div>
-<<<<<<< HEAD
-=======
   </div>
 </div>
->>>>>>> 737acf342071e24dd00e350bbf7ca3780d3a1803
     <div id="v-tasks" style="display:none;max-width:640px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
         <h2 style="font-family:'Manrope',sans-serif;font-weight:800;font-size:19px;color:var(--text);">
@@ -1241,23 +1234,15 @@ function switchView(v) {
   });
   document.getElementById('v-board').style.display    = v==='board'    ? 'grid'  : 'none';
   document.getElementById('v-calendar').style.display = v==='calendar' ? 'block' : 'none';
-<<<<<<< HEAD
   document.getElementById('v-ai').style.display       = v==='ai'       ? 'block' : 'none';
-=======
- document.getElementById('v-ai').style.display       = v==='ai'       ? 'block' : 'none';
->>>>>>> 737acf342071e24dd00e350bbf7ca3780d3a1803
   document.getElementById('v-tasks').style.display    = v==='tasks'    ? 'block' : 'none';
   const addBtn = document.getElementById('add-card-btn');
   const sub    = document.getElementById('page-sub');
   if (v==='board')    { sub.textContent='Produktivitäts-Board';  addBtn.style.display='flex'; }
   if (v==='calendar') { sub.textContent='Kalender-Ansicht';      addBtn.style.display='none'; renderCalendar(); }
-<<<<<<< HEAD
   if (v==='ai')       { sub.textContent='KI-Assistent'; addBtn.style.display='none'; loadApiKey(); }
   if (v==='tasks')    { sub.textContent='Aufgaben & Checklisten'; addBtn.style.display='none'; renderTasks(); }
 
-=======
- if (v==='ai')       { sub.textContent='KI-Assistent'; addBtn.style.display='none'; loadApiKey(); } if (v==='tasks')    { sub.textContent='Aufgaben & Checklisten'; addBtn.style.display='none'; renderTasks(); }
->>>>>>> 737acf342071e24dd00e350bbf7ca3780d3a1803
 }
 
 function render() {
