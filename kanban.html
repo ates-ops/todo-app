@@ -1913,49 +1913,6 @@ function getBoardContext() {
   return lines.length ? lines.join('\n') : 'Board ist leer.';
 }
 
-function addAiMessage(role, text) {
-  const container = document.getElementById('ai-messages');
-  const isUser = role === 'user';
-
-  const placeholder = container.querySelector('div[style*="text-align:center"]');
-  if (placeholder) placeholder.remove();
-
-  const msg = document.createElement('div');
-  msg.style.cssText = `display:flex;justify-content:${isUser ? 'flex-end' : 'flex-start'};`;
-
-  const bubble = document.createElement('div');
-  bubble.style.cssText = `
-    max-width:85%;padding:11px 15px;border-radius:12px;font-size:13px;line-height:1.6;
-    white-space:pre-wrap;word-break:break-word;
-    background:${isUser ? 'var(--accent)' : 'var(--surface2)'};
-    color:${isUser ? '#fff' : 'var(--text)'};
-    border:1px solid ${isUser ? 'transparent' : 'var(--border)'};
-  `;
-  bubble.textContent = text;
-  msg.appendChild(bubble);
-  container.appendChild(msg);
-  container.scrollTop = container.scrollHeight;
-}
-
-function addAiLoading() {
-  const container = document.getElementById('ai-messages');
-  const msg = document.createElement('div');
-  msg.id = 'ai-loading';
-  msg.style.cssText = 'display:flex;justify-content:flex-start;';
-  msg.innerHTML = `
-    <div style="padding:11px 15px;border-radius:12px;background:var(--surface2);
-      border:1px solid var(--border);font-size:13px;color:var(--muted);">
-      Denkt nach...
-    </div>`;
-  container.appendChild(msg);
-  container.scrollTop = container.scrollHeight;
-}
-
-function removeAiLoading() {
-  const el = document.getElementById('ai-loading');
-  if (el) el.remove();
-}
-
 async function sendAiMessage() {
   const input = document.getElementById('ai-input');
   const text = input.value.trim();
