@@ -1843,13 +1843,7 @@ async function sendAiMessage() {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 1024,
-        system: `Du bist ein hilfreicher Assistent für ein Kanban-Board.
-Du hilfst dem Benutzer bei der Aufgabenplanung und Produktivität.
-Antworte immer auf Deutsch.
-Wenn du Aufgaben vorschlägst, schreibe sie immer als nummerierte Liste: 1. 2. 3.
-Kein Markdown, keine Sternchen, keine ##. Nur einfacher Text.
-Aktueller Board-Zustand:
-${boardContext}`,
+        system: `Du bist ein Assistent für ein Kanban-Board. Antworte immer auf Deutsch. Wenn du Aufgaben vorschlägst, schreibe NUR eine nummerierte Liste ohne Markdown, ohne Sternchen, ohne ##, ohne Emojis, ohne zusätzlichen Text davor oder danach. Beispiel: 1. Kartons besorgen 2. Strom ummelden 3. Adresse ändern. Aktueller Board-Zustand: ${boardContext}`,
         messages: [{ role: 'user', content: text }]
       })
     });
