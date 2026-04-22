@@ -192,6 +192,9 @@ html[data-theme="dark"] .fi:focus{box-shadow:0 0 0 3px rgba(59,130,246,.15);}
     <div class="ni active" id="ni-board" onclick="switchView('board')">
       <span class="icon">view_kanban</span> Boards
     </div>
+    <div class="ni" id="ni-ai" onclick="switchView('ai')">
+  <span class="icon">smart_toy</span> KI-Assistent
+</div>
     <div class="ni" id="ni-tasks" onclick="switchView('tasks')">
       <span class="icon">checklist</span> Aufgaben
     </div>
@@ -378,7 +381,11 @@ html[data-theme="dark"] .fi:focus{box-shadow:0 0 0 3px rgba(59,130,246,.15);}
     </div>
 
     <!-- TASKS / CHECKLIST VIEW -->
+<<<<<<< HEAD
      <!-- AI VIEW -->
+=======
+    <!-- AI VIEW -->
+>>>>>>> 737acf342071e24dd00e350bbf7ca3780d3a1803
 <div id="v-ai" style="display:none;max-width:720px;">
   
   <!-- API Key Eingabe -->
@@ -426,6 +433,11 @@ html[data-theme="dark"] .fi:focus{box-shadow:0 0 0 3px rgba(59,130,246,.15);}
         Senden
       </button>
     </div>
+<<<<<<< HEAD
+=======
+  </div>
+</div>
+>>>>>>> 737acf342071e24dd00e350bbf7ca3780d3a1803
     <div id="v-tasks" style="display:none;max-width:640px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
         <h2 style="font-family:'Manrope',sans-serif;font-weight:800;font-size:19px;color:var(--text);">
@@ -1229,15 +1241,23 @@ function switchView(v) {
   });
   document.getElementById('v-board').style.display    = v==='board'    ? 'grid'  : 'none';
   document.getElementById('v-calendar').style.display = v==='calendar' ? 'block' : 'none';
+<<<<<<< HEAD
   document.getElementById('v-ai').style.display       = v==='ai'       ? 'block' : 'none';
+=======
+ document.getElementById('v-ai').style.display       = v==='ai'       ? 'block' : 'none';
+>>>>>>> 737acf342071e24dd00e350bbf7ca3780d3a1803
   document.getElementById('v-tasks').style.display    = v==='tasks'    ? 'block' : 'none';
   const addBtn = document.getElementById('add-card-btn');
   const sub    = document.getElementById('page-sub');
   if (v==='board')    { sub.textContent='Produktivitäts-Board';  addBtn.style.display='flex'; }
   if (v==='calendar') { sub.textContent='Kalender-Ansicht';      addBtn.style.display='none'; renderCalendar(); }
+<<<<<<< HEAD
   if (v==='ai')       { sub.textContent='KI-Assistent'; addBtn.style.display='none'; loadApiKey(); }
   if (v==='tasks')    { sub.textContent='Aufgaben & Checklisten'; addBtn.style.display='none'; renderTasks(); }
 
+=======
+ if (v==='ai')       { sub.textContent='KI-Assistent'; addBtn.style.display='none'; loadApiKey(); } if (v==='tasks')    { sub.textContent='Aufgaben & Checklisten'; addBtn.style.display='none'; renderTasks(); }
+>>>>>>> 737acf342071e24dd00e350bbf7ca3780d3a1803
 }
 
 function render() {
@@ -1877,6 +1897,149 @@ ${boardContext}`,
 //  BOOT
 
 // ════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════
+//  KI-ASSISTENT
+// ════════════════════════════════════════════════════════════════
+
+function saveApiKey() {
+  const key = document.getElementById('ai-key-input').value.trim();
+  if (!key.startsWith('sk-ant-')) {
+    document.getElementById('ai-key-status').textContent = 'Ungültiger Key. Muss mit sk-ant- beginnen.';
+    document.getElementById('ai-key-status').style.color = '#ef4444';
+    return;
+  }
+  localStorage.setItem('anthropic_key', key);
+  document.getElementById('ai-key-input').value = '';
+  document.getElementById('ai-key-status').textContent = 'Key gespeichert.';
+  document.getElementById('ai-key-status').style.color = '#22c55e';
+}
+
+function loadApiKey() {
+  const key = localStorage.getItem('anthropic_key');
+  if (key) {
+    document.getElementById('ai-key-status').textContent = 'API Key ist gespeichert.';
+    document.getElementById('ai-key-status').style.color = '#22c55e';
+  }
+  return key;
+}
+
+function getBoardContext() {
+  const lines = [];
+  COLS.forEach(col => {
+    const cards = data.columns[col.id] || [];
+    if (cards.length) {
+      lines.push(`${col.label} (${cards.length} Karten):`);
+      cards.forEach(c => {
+        lines.push(`  - ${c.title}${c.priority ? ' ['+c.priority+']' : ''}${c.dueDate ? ' (fällig: '+c.dueDate+')' : ''}`);
+      });
+    }
+  });
+  return lines.length ? lines.join('\n') : 'Board ist leer.';
+}
+
+function addAiMessage(role, text) {
+  const container = document.getElementById('ai-messages');
+  const isUser = role === 'user';
+
+  const placeholder = container.querySelector('div[style*="text-align:center"]');
+  if (placeholder) placeholder.remove();
+
+  const msg = document.createElement('div');
+  msg.style.cssText = `display:flex;justify-content:${isUser ? 'flex-end' : 'flex-start'};`;
+
+  const bubble = document.createElement('div');
+  bubble.style.cssText = `
+    max-width:85%;padding:11px 15px;border-radius:12px;font-size:13px;line-height:1.6;
+    white-space:pre-wrap;word-break:break-word;
+    background:${isUser ? 'var(--accent)' : 'var(--surface2)'};
+    color:${isUser ? '#fff' : 'var(--text)'};
+    border:1px solid ${isUser ? 'transparent' : 'var(--border)'};
+  `;
+  bubble.textContent = text;
+  msg.appendChild(bubble);
+  container.appendChild(msg);
+  container.scrollTop = container.scrollHeight;
+}
+
+function addAiLoading() {
+  const container = document.getElementById('ai-messages');
+  const msg = document.createElement('div');
+  msg.id = 'ai-loading';
+  msg.style.cssText = 'display:flex;justify-content:flex-start;';
+  msg.innerHTML = `
+    <div style="padding:11px 15px;border-radius:12px;background:var(--surface2);
+      border:1px solid var(--border);font-size:13px;color:var(--muted);">
+      Denkt nach...
+    </div>`;
+  container.appendChild(msg);
+  container.scrollTop = container.scrollHeight;
+}
+
+function removeAiLoading() {
+  const el = document.getElementById('ai-loading');
+  if (el) el.remove();
+}
+
+async function sendAiMessage() {
+  const input = document.getElementById('ai-input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  const key = loadApiKey();
+  if (!key) {
+    toast('Bitte zuerst API Key speichern.', 'warn');
+    return;
+  }
+
+  input.value = '';
+  document.getElementById('ai-send-btn').disabled = true;
+  addAiMessage('user', text);
+  addAiLoading();
+
+  const boardContext = getBoardContext();
+
+  try {
+    const response = await fetch('https://spring-butterfly-5aa3.ates-burak-10.workers.dev', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1024,
+        system: `Du bist ein hilfreicher Assistent für ein Kanban-Board. 
+Du hilfst dem Benutzer bei der Aufgabenplanung und Produktivität.
+Antworte immer auf Deutsch.
+Aktueller Board-Zustand:
+${boardContext}`,
+        messages: [{ role: 'user', content: text }]
+      })
+    });
+
+    const result = await response.json();
+
+    if (result.error) {
+      removeAiLoading();
+      addAiMessage('assistant', 'Fehler: ' + result.error.message);
+      return;
+    }
+
+    const reply = result.content[0].text;
+    removeAiLoading();
+    addAiMessage('assistant', reply);
+
+  } catch (err) {
+    removeAiLoading();
+    addAiMessage('assistant', 'Verbindungsfehler. Bitte prüfe deinen API Key und die Internetverbindung.');
+    console.error('[AI]', err);
+  }
+
+  document.getElementById('ai-send-btn').disabled = false;
+  input.focus();
+}
 console.log('[Ates-Board] 🚀 Startet …');
 applyTheme();
 applyNotifUI();
